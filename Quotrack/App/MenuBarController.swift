@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let menuPresenter: StatusMenuPresenter
     private let interaction: MenuBarInteractionHandler
     private let menu: NSMenu
+    var onOpenSettings: (() -> Void)?
     var onSwitchDataSource: (() -> Void)?
 
     init(monitor: LiveBalanceMonitor) {
@@ -47,10 +48,10 @@ final class MenuBarController: NSObject {
     private func configureMenu() {
         let settingsItem = menu.addItem(
             withTitle: "设置…",
-            action: nil,
+            action: #selector(openSettings),
             keyEquivalent: ","
         )
-        settingsItem.isEnabled = false
+        settingsItem.target = self
 
         let launchAtLoginItem = menu.addItem(
             withTitle: "开机启动",
@@ -83,6 +84,10 @@ final class MenuBarController: NSObject {
         let isRightClick = event?.type == .rightMouseUp
             || (event?.modifierFlags.contains(.control) ?? false)
         interaction.handle(isRightClick ? .right : .left)
+    }
+
+    @objc private func openSettings() {
+        onOpenSettings?()
     }
 
     @objc private func switchDataSource() {
