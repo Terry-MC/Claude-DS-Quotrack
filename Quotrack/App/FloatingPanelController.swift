@@ -6,7 +6,7 @@ final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
 
     init(
-        monitor: LiveBalanceMonitor,
+        monitor: any BalanceMonitor,
         onAddAccount: @escaping () -> Void = {}
     ) {
         let contentSize = NSSize(width: 360, height: 420)
@@ -30,8 +30,36 @@ final class FloatingPanelController: PanelPresenting {
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
         panel.setContentSize(contentSize)
-        panel.center()
         self.panel = panel
+        restoreFrame(of: panel)
+    }
+
+    /// Restores the last position instead of centering on every launch. A
+    /// saved frame that is still on a display is clamped inside that display's
+    /// visible frame; a frame from a disconnected display is centered.
+    private func restoreFrame(of panel: NSPanel) {
+        panel.setFrameAutosaveName(PanelFrameMemory.autosaveName)
+        guard panel.setFrameUsingName(PanelFrameMemory.autosaveName) else {
+            center(panel)
+            return
+        }
+        let visibleFrames = NSScreen.screens.map(\.visibleFrame)
+        if let clamped = PanelFrameMemory.clamped(panel.frame, to: visibleFrames) {
+            panel.setFrame(clamped, display: false)
+        } else {
+            center(panel)
+        }
+    }
+
+    private func center(_ panel: NSPanel) {
+        guard let visibleFrame = NSScreen.main?.visibleFrame else {
+            panel.center()
+            return
+        }
+        panel.setFrame(
+            PanelFrameMemory.centered(size: panel.frame.size, in: visibleFrame),
+            display: false
+        )
     }
 
     var isVisible: Bool {
