@@ -4,7 +4,7 @@ import Observation
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
-    private let monitor: LiveBalanceMonitor
+    private let monitor: any BalanceMonitor
     private let panelController: FloatingPanelController
     private let menuPresenter: StatusMenuPresenter
     private let interaction: MenuBarInteractionHandler
@@ -15,7 +15,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     var onSwitchDataSource: (() -> Void)?
 
     init(
-        monitor: LiveBalanceMonitor,
+        monitor: any BalanceMonitor,
         settings: SettingsModel,
         onAddAccount: @escaping () -> Void = {}
     ) {

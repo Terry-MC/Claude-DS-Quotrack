@@ -52,6 +52,14 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// The Polling Interval used when the caller does not configure one.
     static let defaultPollingInterval: TimeInterval = 5 * 60
 
+    /// A Snapshot is Stale once it is older than three Polling Intervals
+    /// without a successful refresh. The polling loop also wakes at this
+    /// boundary so the row and menu bar can show Stale without waiting for
+    /// the next scheduled fetch.
+    static func stalenessWindow(for pollingInterval: TimeInterval) -> TimeInterval {
+        3 * pollingInterval
+    }
+
     /// The global number of Provider fetches allowed in flight at once.
     static let maxConcurrentFetches = 3
 
@@ -254,7 +262,9 @@ final class LiveBalanceMonitor: BalanceMonitor {
             guard let snapshot = row.snapshot, snapshot.isAvailable else {
                 continue
             }
-            let staleAt = snapshot.fetchedAt.addingTimeInterval(3 * pollingInterval)
+            let staleAt = snapshot.fetchedAt.addingTimeInterval(
+                Self.stalenessWindow(for: pollingInterval)
+            )
             if staleAt >= date {
                 deadlines.append(staleAt)
             }
@@ -464,9 +474,10 @@ final class LiveBalanceMonitor: BalanceMonitor {
         }
     }
 
-    /// A Snapshot older than three Polling Intervals is Stale regardless of the
-    /// last fetch outcome; the last known Balance stays visible. Before that
-    /// threshold, an error is surfaced as an error.
+    /// A current fetch error outranks a Stale Snapshot, so the row and the menu
+    /// bar icon report the error even when the last known Balance is old. With
+    /// no current error, a Snapshot older than three Polling Intervals is
+    /// Stale and keeps its last known Balance visible.
     private func status(
         for snapshot: BalanceSnapshot?,
         error: BalanceProviderError?,
@@ -475,14 +486,17 @@ final class LiveBalanceMonitor: BalanceMonitor {
         guard let snapshot else {
             return error == nil ? nil : .error
         }
+        if error != nil {
+            return .error
+        }
         guard snapshot.isAvailable else {
             return .unavailable
         }
         let age = now.timeIntervalSince(snapshot.fetchedAt)
-        if age > 3 * pollingInterval {
+        if age > Self.stalenessWindow(for: pollingInterval) {
             return .stale
         }
-        return error == nil ? .fresh : .error
+        return .fresh
     }
 }
 

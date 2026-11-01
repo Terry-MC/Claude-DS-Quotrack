@@ -74,10 +74,10 @@ struct AggregateStateTests {
     }
 
     @Test
-    func aStaleRowThatAlsoCarriesAnErrorFollowsItsGrayPresentation() {
+    func aCurrentErrorOutranksAStaleSnapshot() {
         let rows = [makeRow(status: .stale, error: .network)]
 
-        #expect(AggregateBalanceState.derive(from: rows) == .warning)
+        #expect(AggregateBalanceState.derive(from: rows) == .error)
     }
 }
 
@@ -163,6 +163,38 @@ struct MonitorAggregateStateTests {
 
         #expect(monitor.rows.first?.status == .stale)
         #expect(monitor.aggregateState == .warning)
+    }
+
+    @Test
+    func aCurrentFetchErrorOutranksAStalePersistedSnapshot() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(id: UUID(), provider: .moonshot, label: "Kimi 主账号")
+        let staleSnapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: now.addingTimeInterval(-3_600),
+            isAvailable: true
+        )
+        let store = InMemorySnapshotStore(
+            accounts: [account],
+            snapshots: [account.id: staleSnapshot]
+        )
+        let monitor = LiveBalanceMonitor(
+            provider: RecordingBalanceProvider { _ in throw BalanceProviderError.network },
+            accounts: [account],
+            store: store,
+            pollingInterval: 300,
+            now: { now }
+        )
+        #expect(monitor.rows.first?.status == .stale)
+
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first)
+        #expect(row.status == .error)
+        #expect(row.error == .network)
+        #expect(BalanceRowPresentation.tone(for: row) == .error)
+        #expect(monitor.aggregateState == .error)
     }
 
     @Test
