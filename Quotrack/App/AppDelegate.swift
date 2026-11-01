@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.menuBarController = menuBarController
 
+        monitor.startPolling()
         Task { await monitor.refresh() }
     }
 

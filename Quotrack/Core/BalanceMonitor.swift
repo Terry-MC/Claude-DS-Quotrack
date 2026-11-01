@@ -49,11 +49,17 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// The Polling Interval used when the caller does not configure one.
     static let defaultPollingInterval: TimeInterval = 5 * 60
 
+    /// The global number of Provider fetches allowed in flight at once.
+    static let maxConcurrentFetches = 3
+
     private var provider: any BalanceProvider
     private var accounts: [Account]
     private var configuredPollingInterval: TimeInterval
     private let clock: any PollingClock
     private let now: @Sendable () -> Date
+    @ObservationIgnored private let limiter = FetchLimiter(
+        capacity: LiveBalanceMonitor.maxConcurrentFetches
+    )
     private var pollingTask: Task<Void, Never>?
     private(set) var rows: [BalanceRow]
 
@@ -147,26 +153,71 @@ final class LiveBalanceMonitor: BalanceMonitor {
         await refresh()
     }
 
+    /// Refreshes every Account concurrently, bounded by the global fetch cap.
+    /// Results are applied as they arrive, so one slow Account never delays
+    /// the rows of the others.
     func refresh() async {
-        for account in accounts {
-            await refreshOne(account)
+        let accounts = self.accounts
+        let provider = self.provider
+        let limiter = self.limiter
+        await withTaskGroup(of: FetchResult.self) { group in
+            for account in accounts {
+                group.addTask {
+                    await Self.fetch(account, using: provider, limiter: limiter)
+                }
+            }
+            for await result in group {
+                apply(result)
+            }
         }
     }
 
+    /// Refreshes exactly one Account, sharing the same fetch cap as polling.
     func refresh(accountID: Account.ID) async {
         guard let account = accounts.first(where: { $0.id == accountID }) else {
             return
         }
-        await refreshOne(account)
+        let result = await Self.fetch(account, using: provider, limiter: limiter)
+        apply(result)
     }
 
-    private func refreshOne(_ account: Account) async {
+    private nonisolated static func fetch(
+        _ account: Account,
+        using provider: any BalanceProvider,
+        limiter: FetchLimiter
+    ) async -> FetchResult {
         do {
-            apply(try await provider.fetchBalance(for: account))
-        } catch let error as BalanceProviderError {
-            apply(error, for: account)
+            try await limiter.acquire()
         } catch {
-            apply(.unknown, for: account)
+            return FetchResult(account: account, outcome: .cancelled)
+        }
+
+        if Task.isCancelled {
+            await limiter.release()
+            return FetchResult(account: account, outcome: .cancelled)
+        }
+
+        let outcome: FetchOutcome
+        do {
+            let snapshot = try await provider.fetchBalance(for: account)
+            outcome = .snapshot(snapshot)
+        } catch {
+            outcome = Task.isCancelled
+                ? .cancelled
+                : .failure(BalanceProviderError.classify(error))
+        }
+        await limiter.release()
+        return FetchResult(account: account, outcome: outcome)
+    }
+
+    private func apply(_ result: FetchResult) {
+        switch result.outcome {
+        case let .snapshot(snapshot):
+            apply(snapshot)
+        case let .failure(error):
+            apply(error, for: result.account)
+        case .cancelled:
+            break
         }
     }
 
@@ -200,4 +251,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
             error: error
         )
     }
+}
+
+/// What one Provider fetch produced, independent of which Account's task ran.
+private enum FetchOutcome: Sendable {
+    case snapshot(BalanceSnapshot)
+    case failure(BalanceProviderError)
+    case cancelled
+}
+
+private struct FetchResult: Sendable {
+    let account: Account
+    let outcome: FetchOutcome
 }
