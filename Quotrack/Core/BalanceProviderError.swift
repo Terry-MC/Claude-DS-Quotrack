@@ -56,8 +56,10 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
     func userMessage(for provider: Provider) -> String {
         switch category {
         case .authentication:
-            provider == .moonshot
-                ? UIStrings.moonshotAuthenticationError
+            // Region-locked credentials commonly fail with the same 401 as an
+            // invalid key, so Region-capable Providers point at the Region.
+            provider.supportsRegion
+                ? UIStrings.regionAuthenticationError
                 : UIStrings.authenticationError
         case .permission:
             provider == .openRouter

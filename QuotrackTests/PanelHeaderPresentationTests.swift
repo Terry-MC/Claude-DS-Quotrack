@@ -20,6 +20,14 @@ struct PanelHeaderPresentationTests {
     }
 
     @Test
+    func theHeaderCarriesTheDisplayNameAndChineseSubtitle() {
+        let header = PanelHeaderPresentation.viewState(for: [])
+
+        #expect(header.title == "Quotrack")
+        #expect(header.subtitle == "AI 余额监控")
+    }
+
+    @Test
     func rowsStillLoadingAreCountedAsNeitherHealthyNorInError() {
         let rows = [makeRow(status: nil)]
 

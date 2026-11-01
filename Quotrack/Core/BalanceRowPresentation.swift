@@ -77,6 +77,11 @@ enum BalanceRowPresentation {
     /// still normal. No Snapshot or no threshold means there is nothing to
     /// compare.
     static func tone(for row: BalanceRow) -> BalanceRowTone {
+        // A current failure outranks any freshness label, including a Stale
+        // Snapshot, so an old Balance never hides an active error.
+        if row.error != nil {
+            return .error
+        }
         guard let status = row.status else {
             return .pending
         }
@@ -108,7 +113,7 @@ enum BalanceRowPresentation {
             accountID: row.id,
             balanceText: snapshot.map(preciseBalanceText(for:)),
             fetchedAtText: snapshot.map { exactTimeText(for: $0.fetchedAt, timeZone: timeZone) },
-            errorText: row.error.map { errorText(for: $0, provider: row.account.provider) },
+            errorText: row.error.map { $0.userMessage(for: row.account.provider) },
             breakdown: (snapshot?.breakdown ?? []).map { item in
                 BalanceBreakdownViewState(
                     kind: item.kind,
@@ -147,13 +152,6 @@ enum BalanceRowPresentation {
         return formatter.localizedString(for: fetchedAt, relativeTo: now)
     }
 
-    private static func errorText(
-        for error: BalanceProviderError,
-        provider: Provider
-    ) -> String {
-        error.userMessage(for: provider)
-    }
-
     private static func breakdownLabel(for kind: BalanceBreakdownItem.Kind) -> String {
         switch kind {
         case .granted: UIStrings.breakdownGranted
@@ -161,7 +159,7 @@ enum BalanceRowPresentation {
         case .voucher: UIStrings.breakdownVoucher
         case .cash: UIStrings.breakdownCash
         case .totalCredits: UIStrings.breakdownTotalCredits
-        case .usage: UIStrings.breakdownUsage
+        case .spend: UIStrings.breakdownSpend
         }
     }
 

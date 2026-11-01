@@ -1,6 +1,10 @@
 /// Simplified Chinese UI text. New panel strings live here so a future
 /// localization pass has one place to start without touching existing text.
 enum UIStrings {
+    // App identity
+    static let displayName = "Quotrack"
+    static let displaySubtitle = "AI 余额监控"
+
     // Menu bar aggregate state
     static let menuBarNormalDescription = "Quotrack：一切正常"
     static let menuBarWarningDescription = "Quotrack：有账户余额偏低或数据已过期"
@@ -11,12 +15,12 @@ enum UIStrings {
     static let breakdownToppedUp = "充值余额"
     static let breakdownVoucher = "代金券余额"
     static let breakdownCash = "现金余额"
-    static let breakdownTotalCredits = "总额度"
-    static let breakdownUsage = "已使用"
+    static let breakdownTotalCredits = "总额"
+    static let breakdownSpend = "消费"
 
     // Typed error detail
     static let authenticationError = "认证失败，请检查 API 密钥。"
-    static let moonshotAuthenticationError = "认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。"
+    static let regionAuthenticationError = "认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。"
     static let permissionError = "权限不足，请检查密钥权限。"
     static let openRouterManagementKeyError = "权限不足，OpenRouter 需要管理密钥。"
     static let networkError = "网络错误，请检查网络连接。"
@@ -38,6 +42,7 @@ enum UIStrings {
     static let emptyAccountsTitle = "还没有账户"
     static let emptyAccountsDescription = "添加一个账户以开始监控余额。"
     static let addAccount = "添加账户…"
+    static let refreshAll = "全部刷新"
 
     // Settings
     static let settingsAccountsTitle = "账户"
@@ -51,7 +56,7 @@ enum UIStrings {
     static let launchAtLoginHint = "默认关闭。开启后 Quotrack 会在登录时自动启动。"
     static let launchAtLoginRequiresApproval = "已请求开机启动，请在“系统设置 › 通用 › 登录项”中允许 Quotrack。"
     static let openLoginItemsSettings = "打开系统设置"
-    static let settingsUnsupportedTitle = "不支持的厂商"
+    static let settingsUnsupportedTitle = "不可查厂商"
     static let unsupportedProvidersExplanation = """
     OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此 Quotrack v1 不会显示这些厂商。余额与消耗、配额是不同指标，混在一起会误导用户。详见 ADR-0001。
     """
@@ -71,6 +76,7 @@ enum UIStrings {
     static let onboardingDetailsTitle = "账户信息"
     static let onboardingLabelField = "标签"
     static let onboardingCredentialField = "API 密钥"
+    static let openRouterManagementKeyWarning = "OpenRouter 只能使用管理密钥，普通推理密钥无法查询余额。管理密钥权限更高，请妥善保管。"
     static let onboardingNext = "下一步"
     static let onboardingBack = "上一步"
     static let onboardingTestAndSave = "测试连接并保存"
