@@ -31,19 +31,36 @@ enum CredentialStoreError: Error, Equatable, LocalizedError {
 }
 
 /// Builds the Security framework queries for one Account's generic-password
-/// item. `kSecUseDataProtectionKeychain` is required: without it macOS uses
-/// the legacy file keychain, ignores accessibility, and may show ACL prompts.
+/// item. Ad-hoc development builds have no team or keychain access group, so
+/// the data-protection keychain returns `errSecMissingEntitlement`; the default
+/// is therefore the legacy login keychain, which still stores credentials in
+/// the macOS Keychain. A team-signed release can pass `true` once it carries
+/// the keychain-access-groups entitlement.
 struct KeychainQuery: Sendable {
     let service: String
     let accountID: Account.ID
+    let usesDataProtectionKeychain: Bool
+
+    init(
+        service: String,
+        accountID: Account.ID,
+        usesDataProtectionKeychain: Bool = false
+    ) {
+        self.service = service
+        self.accountID = accountID
+        self.usesDataProtectionKeychain = usesDataProtectionKeychain
+    }
 
     var baseQuery: [String: Any] {
-        [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword as String,
             kSecAttrService as String: service,
             kSecAttrAccount as String: accountID.uuidString,
-            kSecUseDataProtectionKeychain as String: true,
         ]
+        if usesDataProtectionKeychain {
+            query[kSecUseDataProtectionKeychain as String] = true
+        }
+        return query
     }
 
     func addQuery(credential: String) -> [String: Any] {
@@ -53,10 +70,13 @@ struct KeychainQuery: Sendable {
     }
 
     func credentialAttributes(_ credential: String) -> [String: Any] {
-        [
+        var attributes: [String: Any] = [
             kSecValueData as String: Data(credential.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock as String,
         ]
+        if usesDataProtectionKeychain {
+            attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock as String
+        }
+        return attributes
     }
 }
 

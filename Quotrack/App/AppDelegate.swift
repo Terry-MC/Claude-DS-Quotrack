@@ -71,10 +71,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.startPolling()
         Task { await monitor.refresh() }
 
-        // A fresh install has no Accounts, so onboarding replaces the useful
-        // but empty panel. Once an Account is saved the panel is revealed.
-        if accountManager.accounts.isEmpty {
+        // A fresh live install has no Accounts, so onboarding replaces the
+        // useful but empty panel. Mock mode already has fixture Accounts, so it
+        // goes straight to the panel instead of asking for a credential.
+        let presentation = LaunchPresentation.make(
+            mode: dataSourceMode,
+            storedAccountCount: accountManager.accounts.count
+        )
+        if presentation.showsOnboarding {
             showOnboarding()
+        }
+        if presentation.showsPanel {
+            menuBarController.showPanel()
         }
     }
 
