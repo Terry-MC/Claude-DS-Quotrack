@@ -102,6 +102,11 @@ struct BalanceRowPresentationTests {
 
     @Test(arguments: [
         (BalanceProviderError.authentication, Provider.deepSeek, "认证失败，请检查 API 密钥。"),
+        (
+            BalanceProviderError.authentication,
+            Provider.moonshot,
+            "认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。"
+        ),
         (BalanceProviderError.permission, Provider.deepSeek, "权限不足，请检查密钥权限。"),
         (BalanceProviderError.permission, Provider.openRouter, "权限不足，OpenRouter 需要管理密钥。"),
         (BalanceProviderError.network, Provider.moonshot, "网络错误，请检查网络连接。"),

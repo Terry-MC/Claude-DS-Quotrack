@@ -56,7 +56,9 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
     func userMessage(for provider: Provider) -> String {
         switch category {
         case .authentication:
-            UIStrings.authenticationError
+            provider == .moonshot
+                ? UIStrings.moonshotAuthenticationError
+                : UIStrings.authenticationError
         case .permission:
             provider == .openRouter
                 ? UIStrings.openRouterManagementKeyError

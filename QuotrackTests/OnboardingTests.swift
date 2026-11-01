@@ -87,6 +87,27 @@ struct OnboardingTests {
     }
 
     @Test
+    func aMoonshotAuthenticationFailureSuggestsCheckingTheRegion() async throws {
+        let context = makeContext(
+            testerResult: .failure(BalanceProviderError.authentication)
+        )
+        context.model.selectedProvider = .moonshot
+        context.model.advance()
+        context.model.selectedRegion = .international
+        context.model.advance()
+        context.model.label = "Kimi 国际"
+        context.model.credential = "sk-wrong-region"
+
+        await context.model.submit()
+
+        #expect(context.model.step == .details)
+        #expect(context.model.errorMessage == UIStrings.moonshotAuthenticationError)
+        #expect(context.model.errorMessage?.contains("区域") == true)
+        #expect(context.manager.accounts.isEmpty)
+        #expect(context.credentials.saveCallCount == 0)
+    }
+
+    @Test
     func aSuccessfulConnectionTestSavesTheAccountAndCompletesOnboarding() async throws {
         let context = makeContext()
         context.model.selectedProvider = .moonshot
