@@ -67,6 +67,11 @@ enum MockFixtures {
                 ]
             ),
             failure(provider: .deepSeek, label: "DeepSeek 限流", error: .rateLimit),
+            failure(
+                provider: .deepSeek,
+                label: "DeepSeek 限流重试",
+                error: .rateLimit(retryAfter: 120)
+            ),
             failure(provider: .moonshot, label: "Kimi 网络异常", error: .network),
             failure(provider: .siliconFlow, label: "SiliconFlow 认证失败", error: .authentication),
             failure(provider: .siliconFlow, label: "SiliconFlow 响应异常", error: .malformedResponse),

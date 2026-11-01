@@ -102,7 +102,7 @@ enum BalanceRowPresentation {
         for error: BalanceProviderError,
         provider: Provider
     ) -> String {
-        switch error {
+        switch error.category {
         case .authentication:
             UIStrings.authenticationError
         case .permission:
