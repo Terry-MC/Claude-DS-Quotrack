@@ -14,4 +14,12 @@ enum Provider: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
         case .openRouter: "OpenRouter"
         }
     }
+
+    /// Whether the Provider has independently credentialed Regions in v1.
+    var supportsRegion: Bool {
+        switch self {
+        case .moonshot, .siliconFlow: true
+        case .deepSeek, .openRouter: false
+        }
+    }
 }
