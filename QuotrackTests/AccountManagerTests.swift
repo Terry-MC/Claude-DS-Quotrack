@@ -267,6 +267,32 @@ struct AccountManagerTests {
         let storedCredential = try credentials.credential(for: account.id)
         #expect(storedCredential == "sk-original")
     }
+
+    @Test
+    func accountsAndCredentialsAreRestoredAfterRelaunch() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let credentials = InMemoryCredentialStore()
+        let firstLaunch = AccountManager(
+            store: FileSnapshotStore(directoryURL: directory),
+            credentialStore: credentials
+        )
+        let account = try firstLaunch.addAccount(
+            provider: .siliconFlow,
+            region: .international,
+            label: "公司账户",
+            credential: "sk-persisted"
+        )
+
+        let relaunched = AccountManager(
+            store: FileSnapshotStore(directoryURL: directory),
+            credentialStore: credentials
+        )
+
+        #expect(relaunched.accounts == [account])
+        let storedCredential = try credentials.credential(for: account.id)
+        #expect(storedCredential == "sk-persisted")
+    }
 }
 
 private func makeTemporaryDirectory() throws -> URL {
