@@ -19,6 +19,13 @@ Source: <https://api-docs.deepseek.com/api/get-user-balance>.
 
 Re-verify this page before changing the endpoint, headers, or field names.
 
+## Endpoint reachability (no credential)
+
+On 2026-11-01 a credential-free request to the endpoint returned HTTP 401 with
+the body `Authentication Fails (governor)`. This confirms the URL is live and
+that a missing or invalid key follows the 401 path the adapter maps to
+`authentication`; it does not exercise a successful balance response.
+
 ## Preconditions
 
 - Build and run the app from Xcode, or:
@@ -72,5 +79,6 @@ Re-verify this page before changing the endpoint, headers, or field names.
 
 - Automated fixture coverage: complete (`DeepSeekAdapterTests`,
   `DeepSeekWiringTests`, `URLSessionTransportTests`).
+- Endpoint reachability and the 401 path: verified without a key.
 - Live verification with a real key: **pending** until a key is supplied in the
   environment or entered by the user during a manual run.
