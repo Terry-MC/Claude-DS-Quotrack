@@ -44,6 +44,11 @@ extension ProviderRegistry {
                 credentialStore: credentialStore,
                 now: now
             ),
+            .siliconFlow: SiliconFlowAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            ),
         ])
     }
 }
