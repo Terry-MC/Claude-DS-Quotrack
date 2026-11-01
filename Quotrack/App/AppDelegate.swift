@@ -4,6 +4,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
     private var monitor: LiveBalanceMonitor?
+    private var store: (any SnapshotStore)?
     private var dataSourceMode = DataSourceMode.live
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -12,8 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dataSourceMode = LaunchOptions
             .parse(arguments: ProcessInfo.processInfo.arguments)
             .dataSourceMode
+        let store = FileSnapshotStore.applicationSupport()
+        self.store = store
         let monitor = LiveBalanceMonitor(
-            dataSource: BalanceDataSource.make(mode: dataSourceMode),
+            dataSource: BalanceDataSource.make(mode: dataSourceMode, store: store),
+            store: dataSourceMode == .live ? store : nil,
             sleepWakeObserver: NSWorkspaceSleepWakeObserver()
         )
         self.monitor = monitor
@@ -33,8 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let monitor else {
             return
         }
-        let dataSource = BalanceDataSource.make(mode: dataSourceMode)
-        Task { await monitor.switchDataSource(dataSource) }
+        let dataSource = BalanceDataSource.make(mode: dataSourceMode, store: store)
+        let persistence = dataSourceMode == .live ? store : nil
+        Task { await monitor.switchDataSource(dataSource, store: persistence) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

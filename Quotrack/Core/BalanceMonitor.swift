@@ -55,6 +55,10 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// Delays after consecutive failures: 1, 2, 5, then 15 minutes, capped.
     static let backoffDelays: [TimeInterval] = [60, 120, 300, 900]
 
+    /// Keeps the scheduler moving past a deadline that has just been reached
+    /// without spinning at zero delay.
+    private static let minimumScheduleTick: TimeInterval = 0.001
+
     /// One Account's independent automatic-refresh schedule.
     private struct AccountSchedule {
         var consecutiveFailures = 0
@@ -67,6 +71,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private let clock: any PollingClock
     private let now: @Sendable () -> Date
     private let sleepWakeObserver: any SleepWakeObserving
+    private var store: (any SnapshotStore)?
     @ObservationIgnored private let limiter = FetchLimiter(
         capacity: LiveBalanceMonitor.maxConcurrentFetches
     )
@@ -103,6 +108,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     init(
         provider: any BalanceProvider,
         accounts: [Account],
+        store: (any SnapshotStore)? = nil,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
         now: (@Sendable () -> Date)? = nil,
@@ -114,17 +120,20 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.clock = clock
         self.now = now ?? { clock.now }
         self.sleepWakeObserver = sleepWakeObserver
-        self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.store = store
         let firstAttempt = clock.now.addingTimeInterval(pollingInterval)
         self.schedules = Dictionary(
             uniqueKeysWithValues: accounts.map {
                 ($0.id, AccountSchedule(nextAutomaticAttemptAt: firstAttempt))
             }
         )
+        self.rows = []
+        self.rows = initialRows(for: accounts, store: store)
     }
 
     convenience init(
         dataSource: BalanceDataSource,
+        store: (any SnapshotStore)? = nil,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
         now: (@Sendable () -> Date)? = nil,
@@ -133,6 +142,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.init(
             provider: dataSource.provider,
             accounts: dataSource.accounts,
+            store: store,
             pollingInterval: pollingInterval,
             clock: clock,
             now: now,
@@ -208,7 +218,10 @@ final class LiveBalanceMonitor: BalanceMonitor {
             }
 
             let deadline = nextScheduledDeadline(after: now)
-            let delay = max(deadline.timeIntervalSince(now), 0)
+            let delay = max(
+                deadline.timeIntervalSince(now),
+                Self.minimumScheduleTick
+            )
             do {
                 try await clock.sleep(for: .seconds(delay))
             } catch {
@@ -233,7 +246,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 continue
             }
             let staleAt = snapshot.fetchedAt.addingTimeInterval(3 * pollingInterval)
-            if staleAt > date {
+            if staleAt >= date {
                 deadlines.append(staleAt)
             }
         }
@@ -256,12 +269,17 @@ final class LiveBalanceMonitor: BalanceMonitor {
         startPollingTask()
     }
 
-    /// Swaps only the Accounts and Provider adapter. The monitor, its polling
-    /// behavior, and the UI stay exactly the same.
-    func switchDataSource(_ dataSource: BalanceDataSource) async {
+    /// Swaps only the Accounts, Provider adapter, and persistence. The
+    /// monitor, its polling behavior, and the UI stay exactly the same. Mock
+    /// mode passes `store: nil` so it never writes to the real store.
+    func switchDataSource(
+        _ dataSource: BalanceDataSource,
+        store: (any SnapshotStore)? = nil
+    ) async {
         provider = dataSource.provider
         accounts = dataSource.accounts
-        rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.store = store
+        rows = initialRows(for: dataSource.accounts, store: store)
         let firstAttempt = now().addingTimeInterval(pollingInterval)
         schedules = Dictionary(
             uniqueKeysWithValues: accounts.map {
@@ -269,6 +287,25 @@ final class LiveBalanceMonitor: BalanceMonitor {
             }
         )
         await refresh()
+    }
+
+    /// Persisted Snapshots are shown before the first refresh so a launch is
+    /// never blank. Freshness is computed against the configured Polling
+    /// Interval, so old Snapshots come back marked Stale.
+    private func initialRows(
+        for accounts: [Account],
+        store: (any SnapshotStore)?
+    ) -> [BalanceRow] {
+        let persisted = store?.loadSnapshots() ?? [:]
+        return accounts.map { account in
+            let snapshot = persisted[account.id]
+            let matching = snapshot?.accountID == account.id ? snapshot : nil
+            return BalanceRow(
+                account: account,
+                snapshot: matching,
+                status: matching.flatMap { status(for: $0, error: nil, at: now()) }
+            )
+        }
     }
 
     /// Refreshes every Account concurrently, bounded by the global fetch cap.
@@ -377,6 +414,9 @@ final class LiveBalanceMonitor: BalanceMonitor {
             snapshot: snapshot,
             status: status(for: snapshot, error: nil, at: now())
         )
+        // Persistence is best-effort: a disk problem must never turn a
+        // successful Balance query into an error for the Account.
+        try? store?.saveSnapshot(snapshot)
     }
 
     private func apply(_ error: BalanceProviderError, for account: Account) {
@@ -430,7 +470,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
             return .unavailable
         }
         let age = now.timeIntervalSince(snapshot.fetchedAt)
-        if age >= 3 * pollingInterval {
+        if age > 3 * pollingInterval {
             return .stale
         }
         return error == nil ? .fresh : .error

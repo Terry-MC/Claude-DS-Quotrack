@@ -39,7 +39,7 @@ struct StalenessTests {
         let freshRow = try #require(monitor.rows.first)
         #expect(freshRow.status == .fresh)
 
-        clock.advance(by: 3 * interval)
+        clock.advance(by: 3 * interval + 1)
         await provider.waitForStartedCount(2)
         await clock.waitForSleepCount(3)
 
@@ -83,7 +83,7 @@ struct StalenessTests {
         monitor.pollingInterval = 60
         await clock.waitForSleepCount(3)
 
-        clock.advance(by: 180)
+        clock.advance(by: 181)
         await provider.waitForStartedCount(2)
         await clock.waitForSleepCount(4)
 

@@ -8,14 +8,21 @@ struct BalanceDataSource: Sendable {
 }
 
 extension BalanceDataSource {
-    static func make(mode: DataSourceMode, now: Date = Date()) -> BalanceDataSource {
+    /// Live mode reads Account metadata from the injected store, so Accounts
+    /// survive relaunch. Mock mode always uses fixtures and never reads or
+    /// writes the real store.
+    static func make(
+        mode: DataSourceMode,
+        now: Date = Date(),
+        store: (any SnapshotStore)? = nil
+    ) -> BalanceDataSource {
         switch mode {
         case .mock:
             return .mock(now: now)
         case .live:
-            // Real adapters and persisted Accounts arrive in later tickets.
+            // Real adapters arrive in later tickets.
             return BalanceDataSource(
-                accounts: [],
+                accounts: store?.loadAccounts() ?? [],
                 provider: ProviderRegistry(adapters: [:])
             )
         }
