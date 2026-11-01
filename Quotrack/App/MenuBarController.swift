@@ -1,25 +1,41 @@
 import AppKit
 
 @MainActor
-final class MenuBarController: NSObject {
+final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let panelController: FloatingPanelController
     private let menuPresenter: StatusMenuPresenter
     private let interaction: MenuBarInteractionHandler
     private let menu: NSMenu
+    private let settings: SettingsModel
+    private let launchAtLoginItem: NSMenuItem
     var onOpenSettings: (() -> Void)?
     var onSwitchDataSource: (() -> Void)?
 
-    init(monitor: LiveBalanceMonitor) {
+    init(
+        monitor: LiveBalanceMonitor,
+        settings: SettingsModel,
+        onAddAccount: @escaping () -> Void = {}
+    ) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let panelController = FloatingPanelController(monitor: monitor)
+        let panelController = FloatingPanelController(
+            monitor: monitor,
+            onAddAccount: onAddAccount
+        )
         let menu = NSMenu()
         let menuPresenter = StatusMenuPresenter(menu: menu)
+        let launchAtLoginItem = NSMenuItem(
+            title: UIStrings.launchAtLoginMenu,
+            action: nil,
+            keyEquivalent: ""
+        )
 
         self.statusItem = statusItem
         self.panelController = panelController
         self.menu = menu
         self.menuPresenter = menuPresenter
+        self.settings = settings
+        self.launchAtLoginItem = launchAtLoginItem
         self.interaction = MenuBarInteractionHandler(panel: panelController, menu: menuPresenter)
 
         super.init()
@@ -27,6 +43,13 @@ final class MenuBarController: NSObject {
         configureStatusItem()
         configureMenu()
         menuPresenter.statusItem = statusItem
+        menu.delegate = self
+        updateLaunchAtLoginItemState()
+    }
+
+    /// Reveals the floating panel, used after onboarding completes.
+    func showPanel() {
+        panelController.show()
     }
 
     private func configureStatusItem() {
@@ -53,12 +76,9 @@ final class MenuBarController: NSObject {
         )
         settingsItem.target = self
 
-        let launchAtLoginItem = menu.addItem(
-            withTitle: "开机启动",
-            action: nil,
-            keyEquivalent: ""
-        )
-        launchAtLoginItem.isEnabled = false
+        launchAtLoginItem.action = #selector(toggleLaunchAtLogin)
+        launchAtLoginItem.target = self
+        menu.addItem(launchAtLoginItem)
 
         #if DEBUG
         let switchDataSourceItem = menu.addItem(
@@ -86,8 +106,22 @@ final class MenuBarController: NSObject {
         interaction.handle(isRightClick ? .right : .left)
     }
 
+    func menuWillOpen(_ menu: NSMenu) {
+        settings.refreshLoginItemStatus()
+        updateLaunchAtLoginItemState()
+    }
+
     @objc private func openSettings() {
         onOpenSettings?()
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        settings.setLaunchAtLogin(!settings.isLaunchAtLoginEnabled)
+        updateLaunchAtLoginItemState()
+    }
+
+    private func updateLaunchAtLoginItemState() {
+        launchAtLoginItem.state = settings.isLaunchAtLoginEnabled ? .on : .off
     }
 
     @objc private func switchDataSource() {
