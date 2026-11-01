@@ -28,41 +28,88 @@ struct BalanceRow: Identifiable, Equatable, Sendable {
 @MainActor
 protocol BalanceMonitor: AnyObject, Observable {
     var rows: [BalanceRow] { get }
+    var pollingInterval: TimeInterval { get set }
+    func startPolling()
+    func stopPolling()
     func refresh() async
 }
 
 @MainActor
 @Observable
 final class LiveBalanceMonitor: BalanceMonitor {
+    /// The Polling Interval used when the caller does not configure one.
+    static let defaultPollingInterval: TimeInterval = 5 * 60
+
     private var provider: any BalanceProvider
     private var accounts: [Account]
-    private let pollingInterval: TimeInterval
+    private var configuredPollingInterval: TimeInterval
+    private let clock: any PollingClock
     private let now: @Sendable () -> Date
+    private var pollingTask: Task<Void, Never>?
     private(set) var rows: [BalanceRow]
+
+    var pollingInterval: TimeInterval {
+        get { configuredPollingInterval }
+        set { configuredPollingInterval = newValue }
+    }
 
     init(
         provider: any BalanceProvider,
         accounts: [Account],
-        pollingInterval: TimeInterval = 5 * 60,
-        now: @escaping @Sendable () -> Date = { Date() }
+        pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
+        clock: any PollingClock = SystemPollingClock(),
+        now: (@Sendable () -> Date)? = nil
     ) {
         self.provider = provider
         self.accounts = accounts
-        self.pollingInterval = pollingInterval
-        self.now = now
+        self.configuredPollingInterval = pollingInterval
+        self.clock = clock
+        self.now = now ?? { clock.now }
         self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
     }
 
-    init(
+    convenience init(
         dataSource: BalanceDataSource,
-        pollingInterval: TimeInterval = 5 * 60,
-        now: @escaping @Sendable () -> Date = { Date() }
+        pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
+        clock: any PollingClock = SystemPollingClock(),
+        now: (@Sendable () -> Date)? = nil
     ) {
-        self.provider = dataSource.provider
-        self.accounts = dataSource.accounts
-        self.pollingInterval = pollingInterval
-        self.now = now
-        self.rows = dataSource.accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.init(
+            provider: dataSource.provider,
+            accounts: dataSource.accounts,
+            pollingInterval: pollingInterval,
+            clock: clock,
+            now: now
+        )
+    }
+
+    /// Starts the periodic refresh loop. The first fetch happens after one
+    /// Polling Interval; launch-time and manual refreshes are separate.
+    func startPolling() {
+        guard pollingTask == nil else {
+            return
+        }
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else {
+                    return
+                }
+                do {
+                    try await self.clock.sleep(for: .seconds(self.pollingInterval))
+                } catch {
+                    return
+                }
+                if Task.isCancelled {
+                    return
+                }
+                await self.refresh()
+            }
+        }
+    }
+
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
     }
 
     /// Swaps only the Accounts and Provider adapter. The monitor, its polling
