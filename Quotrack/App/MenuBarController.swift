@@ -8,9 +8,9 @@ final class MenuBarController: NSObject {
     private let interaction: MenuBarInteractionHandler
     private let menu: NSMenu
 
-    override init() {
+    init(monitor: any BalanceMonitor) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        let panelController = FloatingPanelController()
+        let panelController = FloatingPanelController(monitor: monitor)
         let menu = NSMenu()
         let menuPresenter = StatusMenuPresenter(menu: menu)
 
