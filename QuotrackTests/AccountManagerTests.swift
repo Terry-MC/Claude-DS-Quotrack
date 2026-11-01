@@ -95,6 +95,31 @@ struct AccountManagerTests {
 
         #expect(account.region == nil)
     }
+
+    @Test
+    func editingTheLabelKeepsTheAccountIdentityAndCredential() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let account = try manager.addAccount(
+            provider: .moonshot,
+            region: .domestic,
+            label: "旧标签",
+            credential: "sk-original"
+        )
+
+        try manager.updateLabel(accountID: account.id, label: "新标签")
+
+        let updated = try #require(manager.accounts.first)
+        #expect(updated.id == account.id)
+        #expect(updated.provider == account.provider)
+        #expect(updated.region == account.region)
+        #expect(updated.label == "新标签")
+        #expect(manager.accounts.count == 1)
+        #expect(store.loadAccounts() == [updated])
+        let storedCredential = try credentials.credential(for: account.id)
+        #expect(storedCredential == "sk-original")
+    }
 }
 
 private func makeTemporaryDirectory() throws -> URL {

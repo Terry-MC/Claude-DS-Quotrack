@@ -43,4 +43,33 @@ final class AccountManager {
         accounts.append(account)
         return account
     }
+
+    /// Changes only the label. Account identity, Provider, Region, and the
+    /// Keychain credential are untouched.
+    func updateLabel(accountID: Account.ID, label: String) throws {
+        guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
+            throw AccountManagerError.accountNotFound
+        }
+        let current = accounts[index]
+        let updated = Account(
+            id: current.id,
+            provider: current.provider,
+            region: current.region,
+            label: label
+        )
+        var updatedAccounts = accounts
+        updatedAccounts[index] = updated
+        try store.saveAccounts(updatedAccounts)
+        accounts = updatedAccounts
+    }
+}
+
+enum AccountManagerError: Error, Equatable, LocalizedError {
+    case accountNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .accountNotFound: "账户不存在。"
+        }
+    }
 }
