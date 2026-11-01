@@ -5,4 +5,13 @@ enum Provider: String, Sendable, Equatable {
     case moonshot
     case siliconFlow
     case openRouter
+
+    var displayName: String {
+        switch self {
+        case .deepSeek: "DeepSeek"
+        case .moonshot: "Moonshot (Kimi)"
+        case .siliconFlow: "SiliconFlow"
+        case .openRouter: "OpenRouter"
+        }
+    }
 }

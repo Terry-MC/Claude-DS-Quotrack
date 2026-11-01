@@ -25,6 +25,35 @@ struct BalanceMonitorTests {
         #expect(row.snapshot == snapshot)
         #expect(row.status == .fresh)
     }
+
+    @Test
+    func refreshReplacesRowWithNewSnapshotFromProvider() async throws {
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let firstFetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let firstSnapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: firstFetchedAt,
+            isAvailable: true
+        )
+        let provider = FakeBalanceProvider(snapshot: firstSnapshot)
+        let monitor = LiveBalanceMonitor(provider: provider, accounts: [account])
+        await monitor.refresh()
+
+        let secondSnapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "7.25")!, currency: .usd),
+            fetchedAt: firstFetchedAt.addingTimeInterval(300),
+            isAvailable: true
+        )
+        provider.snapshot = secondSnapshot
+
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first)
+        #expect(row.snapshot == secondSnapshot)
+        #expect(row.status == .fresh)
+    }
 }
 
 private final class FakeBalanceProvider: BalanceProvider, @unchecked Sendable {
