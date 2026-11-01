@@ -27,11 +27,15 @@ final class AccountManager {
         label: String,
         credential: String
     ) throws -> Account {
+        let trimmedLabel = try validatedLabel(label)
+        guard !credential.isEmpty else {
+            throw AccountManagerError.missingCredential
+        }
         let account = Account(
             id: UUID(),
             provider: provider,
             region: provider.supportsRegion ? (region ?? .domestic) : nil,
-            label: label
+            label: trimmedLabel
         )
         try credentialStore.save(credential, for: account.id)
         do {
@@ -50,12 +54,13 @@ final class AccountManager {
         guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
             throw AccountManagerError.accountNotFound
         }
+        let trimmedLabel = try validatedLabel(label)
         let current = accounts[index]
         let updated = Account(
             id: current.id,
             provider: current.provider,
             region: current.region,
-            label: label
+            label: trimmedLabel
         )
         var updatedAccounts = accounts
         updatedAccounts[index] = updated
@@ -68,6 +73,9 @@ final class AccountManager {
     func replaceCredential(accountID: Account.ID, credential: String) throws {
         guard accounts.contains(where: { $0.id == accountID }) else {
             throw AccountManagerError.accountNotFound
+        }
+        guard !credential.isEmpty else {
+            throw AccountManagerError.missingCredential
         }
         try credentialStore.save(credential, for: accountID)
     }
@@ -82,14 +90,26 @@ final class AccountManager {
         try store.deleteAccount(id: id)
         accounts.removeAll { $0.id == id }
     }
+
+    private func validatedLabel(_ label: String) throws -> String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            throw AccountManagerError.missingLabel
+        }
+        return trimmed
+    }
 }
 
 enum AccountManagerError: Error, Equatable, LocalizedError {
     case accountNotFound
+    case missingLabel
+    case missingCredential
 
     var errorDescription: String? {
         switch self {
         case .accountNotFound: "账户不存在。"
+        case .missingLabel: "请填写账户标签。"
+        case .missingCredential: "请填写凭证。"
         }
     }
 }

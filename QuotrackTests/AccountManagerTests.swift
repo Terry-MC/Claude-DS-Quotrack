@@ -189,6 +189,84 @@ struct AccountManagerTests {
         #expect(keptCredential == "sk-keep")
         #expect(store.loadSnapshots() == [kept.id: keptSnapshot])
     }
+
+    @Test
+    func addingAnAccountWithoutALabelIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+
+        #expect(throws: AccountManagerError.missingLabel) {
+            try manager.addAccount(
+                provider: .deepSeek,
+                label: "   ",
+                credential: "sk-deepseek"
+            )
+        }
+
+        #expect(manager.accounts.isEmpty)
+        #expect(store.loadAccounts().isEmpty)
+        #expect(credentials.saveCallCount == 0)
+    }
+
+    @Test
+    func addingAnAccountWithoutACredentialIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+
+        #expect(throws: AccountManagerError.missingCredential) {
+            try manager.addAccount(
+                provider: .deepSeek,
+                label: "个人账户",
+                credential: ""
+            )
+        }
+
+        #expect(manager.accounts.isEmpty)
+        #expect(store.loadAccounts().isEmpty)
+        #expect(credentials.saveCallCount == 0)
+    }
+
+    @Test
+    func renamingAnAccountToABlankLabelIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let manager = AccountManager(
+            store: store,
+            credentialStore: InMemoryCredentialStore()
+        )
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        #expect(throws: AccountManagerError.missingLabel) {
+            try manager.updateLabel(accountID: account.id, label: " ")
+        }
+
+        #expect(manager.accounts == [account])
+        #expect(store.loadAccounts() == [account])
+    }
+
+    @Test
+    func replacingACredentialWithAnEmptyValueIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-original"
+        )
+
+        #expect(throws: AccountManagerError.missingCredential) {
+            try manager.replaceCredential(accountID: account.id, credential: "")
+        }
+
+        let storedCredential = try credentials.credential(for: account.id)
+        #expect(storedCredential == "sk-original")
+    }
 }
 
 private func makeTemporaryDirectory() throws -> URL {
