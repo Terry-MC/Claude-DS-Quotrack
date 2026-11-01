@@ -5,7 +5,7 @@ import Testing
 struct OnboardingTests {
     @Test
     func onboardingStartsAtProviderSelection() throws {
-        let context = try makeContext()
+        let context = makeContext()
 
         #expect(context.model.step == .provider)
         #expect(context.model.completedAccount == nil)
@@ -14,7 +14,7 @@ struct OnboardingTests {
 
     @Test
     func aProviderWithoutRegionsGoesStraightToAccountDetails() throws {
-        let context = try makeContext()
+        let context = makeContext()
 
         context.model.selectedProvider = .deepSeek
         context.model.advance()
@@ -26,7 +26,7 @@ struct OnboardingTests {
 
     @Test
     func aRegionCapableProviderAsksForTheRegionBeforeAccountDetails() throws {
-        let context = try makeContext()
+        let context = makeContext()
 
         context.model.selectedProvider = .moonshot
         context.model.advance()
@@ -45,7 +45,7 @@ struct OnboardingTests {
 
     @Test
     func onSubmitWithoutALabelOrCredentialTheTesterIsNotCalled() async throws {
-        let context = try makeContext()
+        let context = makeContext()
         context.model.selectedProvider = .deepSeek
         context.model.advance()
         context.model.label = "  "
@@ -61,7 +61,7 @@ struct OnboardingTests {
 
     @Test
     func aFailedConnectionTestShowsTheErrorAndSavesNothing() async throws {
-        let context = try makeContext(
+        let context = makeContext(
             testerResult: .failure(BalanceProviderError.authentication)
         )
         context.model.selectedProvider = .openRouter
@@ -88,7 +88,7 @@ struct OnboardingTests {
 
     @Test
     func aSuccessfulConnectionTestSavesTheAccountAndCompletesOnboarding() async throws {
-        let context = try makeContext()
+        let context = makeContext()
         context.model.selectedProvider = .moonshot
         context.model.advance()
         context.model.selectedRegion = .international
@@ -120,7 +120,7 @@ struct OnboardingTests {
 
     @Test
     func aRetryAfterAFailedConnectionTestCanSucceed() async throws {
-        let context = try makeContext(testerResults: [
+        let context = makeContext(testerResults: [
             .failure(BalanceProviderError.network),
             .success(makeOnboardingSnapshot()),
         ])
@@ -144,7 +144,7 @@ struct OnboardingTests {
 
     @Test
     func accountDetailsAreTrimmedBeforeSaving() async throws {
-        let context = try makeContext()
+        let context = makeContext()
         context.model.selectedProvider = .siliconFlow
         context.model.advance()
         context.model.selectedRegion = .domestic
@@ -171,7 +171,7 @@ private struct OnboardingContext {
 @MainActor
 private func makeContext(
     testerResult: Result<BalanceSnapshot, BalanceProviderError> = .success(makeOnboardingSnapshot())
-) throws -> OnboardingContext {
+) -> OnboardingContext {
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
@@ -189,7 +189,7 @@ private func makeContext(
 @MainActor
 private func makeContext(
     testerResults: [Result<BalanceSnapshot, BalanceProviderError>]
-) throws -> OnboardingContext {
+) -> OnboardingContext {
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
