@@ -22,4 +22,23 @@ struct BalanceRowPresentationTests {
         #expect(viewState.updatedText == "5分钟前")
         #expect(viewState.statusText == "正常")
     }
+
+    @Test
+    func staleRowKeepsTheLastKnownBalanceAndIsMarkedStale() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: now.addingTimeInterval(-900),
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: snapshot, status: .stale)
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.balanceText == "¥42.50")
+        #expect(viewState.statusText == "已过期")
+        #expect(viewState.status == .stale)
+    }
 }
