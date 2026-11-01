@@ -1,7 +1,7 @@
 import Foundation
 
 /// The currency a Balance is reported in. Amounts are never converted.
-struct Currency: Equatable, Sendable {
+struct Currency: Codable, Equatable, Sendable {
     let code: String
     let symbol: String
 
@@ -10,7 +10,7 @@ struct Currency: Equatable, Sendable {
 }
 
 /// The prepaid credit remaining on an Account, as reported by its Provider.
-struct Balance: Equatable, Sendable {
+struct Balance: Codable, Equatable, Sendable {
     let amount: Decimal
     let currency: Currency
 }
@@ -25,7 +25,7 @@ enum SnapshotStatus: String, Sendable, Equatable {
 }
 
 /// The result of one balance query for one Account at one point in time.
-struct BalanceSnapshot: Equatable, Sendable {
+struct BalanceSnapshot: Codable, Equatable, Sendable {
     let accountID: Account.ID
     let balance: Balance
     let fetchedAt: Date
