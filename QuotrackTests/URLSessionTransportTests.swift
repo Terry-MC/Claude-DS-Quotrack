@@ -46,7 +46,7 @@ struct URLSessionTransportTests {
     }
 
     @Test
-    func transportFailuresPropagateToTheAdapterAsNetworkErrors() async {
+    func transportFailuresPropagateAsURLErrors() async {
         let url = URL(string: "https://transport.test/offline")!
         URLSessionTestStub.register(
             url: url,
