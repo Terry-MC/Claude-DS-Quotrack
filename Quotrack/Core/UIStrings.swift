@@ -1,6 +1,11 @@
 /// Simplified Chinese UI text. New panel strings live here so a future
 /// localization pass has one place to start without touching existing text.
 enum UIStrings {
+    // Menu bar aggregate state
+    static let menuBarNormalDescription = "Quotrack：一切正常"
+    static let menuBarWarningDescription = "Quotrack：有账户余额偏低或数据已过期"
+    static let menuBarErrorDescription = "Quotrack：有账户出错"
+
     // Breakdown labels
     static let breakdownGranted = "赠送余额"
     static let breakdownToppedUp = "充值余额"

@@ -1,5 +1,23 @@
 import Foundation
 
+/// The visual emphasis of an Account row. Derived in the shared core so the
+/// low-Balance threshold comparison and status precedence stay testable
+/// without SwiftUI.
+enum BalanceRowTone: Equatable, Sendable {
+    case normal
+    /// The Snapshot is fresh but its Balance is below the Account's threshold.
+    case lowBalance
+    /// No successful refresh within three Polling Intervals; last known
+    /// Balance stays visible but may be outdated.
+    case stale
+    /// The Provider reported the Account as unavailable.
+    case unavailable
+    /// The last refresh failed.
+    case error
+    /// No Snapshot and no failure yet.
+    case pending
+}
+
 /// Display-ready state for one Account row. Deriving it in the shared core
 /// keeps the panel a thin renderer and keeps formatting testable.
 struct BalanceRowViewState: Identifiable, Equatable, Sendable {
@@ -10,6 +28,7 @@ struct BalanceRowViewState: Identifiable, Equatable, Sendable {
     let updatedText: String
     let statusText: String
     let status: SnapshotStatus?
+    let tone: BalanceRowTone
 }
 
 /// One breakdown line in an expanded row.
@@ -46,8 +65,38 @@ enum BalanceRowPresentation {
             balanceText: row.snapshot.map(balanceText(for:)) ?? placeholder,
             updatedText: row.snapshot.map { relativeText(for: $0.fetchedAt, now: now) } ?? placeholder,
             statusText: row.status.map(statusText(for:)) ?? placeholder,
-            status: row.status
+            status: row.status,
+            tone: tone(for: row)
         )
+    }
+
+    /// Status wins over the low-Balance warning: an error is red and a Stale
+    /// Snapshot is gray even when its last known Balance is below the
+    /// threshold. Only a fresh Balance below the Account's threshold is amber.
+    /// The warning is strictly below, so a Balance equal to the threshold is
+    /// still normal. No Snapshot or no threshold means there is nothing to
+    /// compare.
+    static func tone(for row: BalanceRow) -> BalanceRowTone {
+        guard let status = row.status else {
+            return .pending
+        }
+        switch status {
+        case .error:
+            return .error
+        case .stale:
+            return .stale
+        case .unavailable:
+            return .unavailable
+        case .fresh:
+            guard
+                let threshold = row.account.lowBalanceThreshold,
+                let amount = row.snapshot?.balance.amount,
+                amount < threshold
+            else {
+                return .normal
+            }
+            return .lowBalance
+        }
     }
 
     static func detailViewState(

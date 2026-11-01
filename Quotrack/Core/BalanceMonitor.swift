@@ -28,6 +28,9 @@ struct BalanceRow: Identifiable, Equatable, Sendable {
 @MainActor
 protocol BalanceMonitor: AnyObject, Observable {
     var rows: [BalanceRow] { get }
+    /// Aggregate health for the menu bar, derived from the same rows the
+    /// panel shows.
+    var aggregateState: AggregateBalanceState { get }
     var pollingInterval: TimeInterval { get set }
     func startPolling()
     func stopPolling()
@@ -80,6 +83,12 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private var isPollingActive = false
     private var isSleeping = false
     private(set) var rows: [BalanceRow]
+
+    /// The menu bar observes this property, so a row change updates the icon
+    /// even while the panel is hidden.
+    var aggregateState: AggregateBalanceState {
+        AggregateBalanceState.derive(from: rows)
+    }
 
     var pollingInterval: TimeInterval {
         get { configuredPollingInterval }
