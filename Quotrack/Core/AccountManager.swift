@@ -62,6 +62,15 @@ final class AccountManager {
         try store.saveAccounts(updatedAccounts)
         accounts = updatedAccounts
     }
+
+    /// Replaces only the Keychain item. Account identity, label, metadata, and
+    /// the persisted Balance Snapshot stay untouched.
+    func replaceCredential(accountID: Account.ID, credential: String) throws {
+        guard accounts.contains(where: { $0.id == accountID }) else {
+            throw AccountManagerError.accountNotFound
+        }
+        try credentialStore.save(credential, for: accountID)
+    }
 }
 
 enum AccountManagerError: Error, Equatable, LocalizedError {

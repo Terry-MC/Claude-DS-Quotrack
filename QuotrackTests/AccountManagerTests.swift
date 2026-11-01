@@ -120,6 +120,33 @@ struct AccountManagerTests {
         let storedCredential = try credentials.credential(for: account.id)
         #expect(storedCredential == "sk-original")
     }
+
+    @Test
+    func replacingTheCredentialChangesOnlyTheStoredCredential() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let account = try manager.addAccount(
+            provider: .openRouter,
+            label: "管理账户",
+            credential: "sk-old"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "12.00")!, currency: .usd),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        try store.saveSnapshot(snapshot)
+
+        try manager.replaceCredential(accountID: account.id, credential: "sk-new")
+
+        #expect(manager.accounts == [account])
+        #expect(store.loadAccounts() == [account])
+        let storedCredential = try credentials.credential(for: account.id)
+        #expect(storedCredential == "sk-new")
+        #expect(store.loadSnapshots() == [account.id: snapshot])
+    }
 }
 
 private func makeTemporaryDirectory() throws -> URL {
