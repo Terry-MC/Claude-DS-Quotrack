@@ -69,3 +69,22 @@ struct ProviderRegistryConnectionTester: ConnectionTesting {
         return try await adapter.fetchBalance(region: region, credential: credential)
     }
 }
+
+extension ProviderRegistryConnectionTester {
+    /// The production connection tester. It uses the same real adapters as the
+    /// live registry, but sends the credential the user just entered rather
+    /// than reading one from the Keychain.
+    static func live(
+        credentialStore: any CredentialStore,
+        transport: any HTTPTransport = URLSessionTransport(),
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) -> ProviderRegistryConnectionTester {
+        ProviderRegistryConnectionTester(adapters: [
+            .deepSeek: DeepSeekAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            ),
+        ])
+    }
+}

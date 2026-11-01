@@ -14,16 +14,20 @@ extension BalanceDataSource {
     static func make(
         mode: DataSourceMode,
         now: Date = Date(),
-        store: (any SnapshotStore)? = nil
+        store: (any SnapshotStore)? = nil,
+        credentialStore: any CredentialStore = KeychainCredentialStore(),
+        transport: any HTTPTransport = URLSessionTransport()
     ) -> BalanceDataSource {
         switch mode {
         case .mock:
             return .mock(now: now)
         case .live:
-            // Real adapters arrive in later tickets.
             return BalanceDataSource(
                 accounts: store?.loadAccounts() ?? [],
-                provider: ProviderRegistry(adapters: [:])
+                provider: ProviderRegistry.live(
+                    credentialStore: credentialStore,
+                    transport: transport
+                )
             )
         }
     }
