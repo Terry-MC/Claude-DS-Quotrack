@@ -27,6 +27,16 @@ and the two live platforms.
 - The OpenAPI operation is not marked deprecated, and both hosts answered on
   2026-11-01.
 
+### Spec discrepancy
+
+The v1 spec describes `chargeBalance` as the granted portion. The official
+OpenAPI document instead defines `balance` as the granted portion and
+`chargeBalance` as the charged portion, with `totalBalance` as their total. The
+adapter follows the OpenAPI contract and keeps the wire field names unchanged:
+`.granted` maps to `data.balance` and `.toppedUp` maps to `data.chargeBalance`.
+The spec wording should be corrected; no adapter change is pending. The manual
+comparison below is the authority for the eventual live check.
+
 Re-verify this contract before changing the endpoint, headers, or field names.
 
 ## Endpoint reachability (no credential)
@@ -70,7 +80,8 @@ balance response.
    - The request goes to `api.siliconflow.com`, the row shows `$`, and the
      amounts match the international console.
    - Using the domestic key for the international Account shows 认证失败，请检查
-     API 密钥。; the Region is the first thing to check.
+     API 密钥，并确认所选区域与凭证匹配。; the Region is the first thing to
+     check.
 
 5. **Refresh.** Use the per-Account refresh action.
    - The fetch time advances and the Balance remains correct.
@@ -81,8 +92,8 @@ balance response.
 
 7. **Authentication failure.** Replace the Account's credential with an invalid
    string through 编辑账户… › 替换凭证.
-   - The next refresh shows 认证失败，请检查 API 密钥。 and no key text is
-     displayed anywhere.
+   - The next refresh shows 认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。
+     and no key text is displayed anywhere.
    - Restore the real key; the next refresh succeeds.
 
 8. **Permission and rate-limit mapping.** These are covered automatically by
@@ -96,9 +107,9 @@ balance response.
 
 ## Status
 
-- Automated fixture coverage: complete (`SiliconFlowAdapterTests`,
-  `SiliconFlowWiringTests`). Tests use the stub transport and never touch the
-  network.
+- Automated fixture coverage: complete (`SiliconFlowAdapterTests` and the
+  parameterized `AdapterWiringTests`). Tests use the stub transport and never
+  touch the network.
 - Endpoint reachability and the 401 path: verified without a key on 2026-11-01.
 - **Live verification with a real key: unverified / pending.** No SiliconFlow
   credential was available. The adapter stays marked unverified until a real

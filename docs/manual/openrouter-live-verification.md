@@ -25,9 +25,9 @@ Re-verify this page before changing the endpoint, headers, or field names.
 
 On 2026-11-01 a credential-free request to the endpoint returned HTTP 401 with
 the body `{"error":{"message":"No cookie auth credentials found","code":401}}`.
-This confirms the URL is live and that a missing or invalid key follows the 401
-path the adapter maps to `authentication`; it does not exercise a successful
-credits response.
+This confirms the URL is live. Because OpenRouter requires a management key,
+both 401 and 403 map to `permission` and show the management-key message; the
+401 response does not exercise a successful credits response.
 
 ## Preconditions
 
@@ -44,6 +44,7 @@ credits response.
 1. **Add the Account.** From the menu bar open onboarding (or 设置… ›
    添加账户…), choose OpenRouter, enter a label such as `OpenRouter 管理`, paste
    the management key, and submit.
+   - The form shows the management-key warning before saving.
    - The connection test succeeds and the Account is saved.
    - The key is not shown again after saving and does not appear in
      `accounts.json` or `snapshots.json`.
@@ -56,7 +57,7 @@ credits response.
    - The row is fresh and the relative last-updated time is recent.
 
 3. **Check the breakdown.** Expand the row.
-   - 总额度 (`total_credits`) and 已使用 (`total_usage`) match the credits page,
+   - 总额 (`total_credits`) and 消费 (`total_usage`) match the credits page,
      and the full-precision Balance is their difference.
 
 4. **Refresh.** Use the per-Account refresh action.
@@ -75,8 +76,8 @@ credits response.
      permission error.
 
 7. **Invalid credential (401).** Replace the credential with an invalid string.
-   - The next refresh shows 认证失败，请检查 API 密钥。 and no key text is
-     displayed anywhere.
+   - The next refresh shows 权限不足，OpenRouter 需要管理密钥。 and no key text
+     is displayed anywhere.
    - Restore the real management key; the next refresh succeeds.
 
 8. **Log check.** In Console.app, filter on the Quotrack process during a
@@ -86,8 +87,8 @@ credits response.
 
 ## Status
 
-- Automated fixture coverage: complete (`OpenRouterAdapterTests`,
-  `OpenRouterWiringTests`, `URLSessionTransportTests`).
+- Automated fixture coverage: complete (`OpenRouterAdapterTests`, the
+  parameterized `AdapterWiringTests`, and `URLSessionTransportTests`).
 - Endpoint reachability and the 401 path: verified without a key.
 - The 403 inference-key path: fixture-only; no inference key was supplied.
 - Live verification with a real management key: **pending** until the user
