@@ -218,7 +218,41 @@ struct DeepSeekAdapterTests {
     }
 
     @Test
-    func multipleBalanceInfosReportTheFirstCurrencyWithoutAggregating() async throws {
+    func aZeroForeignBalanceDoesNotHideTheNonZeroCNYBalance() async throws {
+        let transport = StubHTTPTransport(
+            response: .json(body: """
+            {
+              "is_available": true,
+              "balance_infos": [
+                {
+                  "currency": "USD",
+                  "total_balance": "0.00",
+                  "granted_balance": "0.00",
+                  "topped_up_balance": "0.00"
+                },
+                {
+                  "currency": "CNY",
+                  "total_balance": "21.00",
+                  "granted_balance": "0.00",
+                  "topped_up_balance": "21.00"
+                }
+              ]
+            }
+            """)
+        )
+        let adapter = makeAdapter(transport: transport)
+
+        let snapshot = try await adapter.fetchBalance(for: account)
+
+        #expect(snapshot.balance == Balance(amount: Decimal(string: "21.00")!, currency: .cny))
+        #expect(snapshot.breakdown == [
+            BalanceBreakdownItem(kind: .granted, amount: 0),
+            BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "21.00")!),
+        ])
+    }
+
+    @Test
+    func multipleBalanceInfosPreferTheNonZeroCNYEntryWithoutAggregating() async throws {
         let transport = StubHTTPTransport(
             response: .json(body: """
             {

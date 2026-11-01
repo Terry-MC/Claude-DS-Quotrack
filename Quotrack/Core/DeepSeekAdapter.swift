@@ -48,7 +48,7 @@ struct DeepSeekAdapter: CredentialBalanceAdapter {
     ) throws -> BalanceSnapshot {
         do {
             let decoded = try JSONDecoder().decode(BalanceResponse.self, from: response.body)
-            guard let info = decoded.balanceInfos.first else {
+            guard let info = Self.selectBalanceInfo(from: decoded.balanceInfos) else {
                 throw BalanceProviderError.malformedResponse
             }
             guard let total = Self.decimal(info.totalBalance) else {
@@ -88,6 +88,36 @@ struct DeepSeekAdapter: CredentialBalanceAdapter {
             items.append(BalanceBreakdownItem(kind: .toppedUp, amount: amount))
         }
         return items.isEmpty ? nil : items
+    }
+
+    /// DeepSeek can return one entry per currency. Prefer a non-zero CNY
+    /// balance, then any non-zero entry, then a zero CNY entry, then the first
+    /// entry. This stops a zero USD entry from hiding a real CNY balance.
+    private static func selectBalanceInfo(from infos: [BalanceInfo]) -> BalanceInfo? {
+        guard !infos.isEmpty else {
+            return nil
+        }
+        if let cny = infos.first(where: { isCNY($0) && isNonZero($0.totalBalance) }) {
+            return cny
+        }
+        if let nonZero = infos.first(where: { isNonZero($0.totalBalance) }) {
+            return nonZero
+        }
+        if let cny = infos.first(where: isCNY) {
+            return cny
+        }
+        return infos.first
+    }
+
+    private static func isCNY(_ info: BalanceInfo) -> Bool {
+        info.currency.uppercased() == "CNY"
+    }
+
+    private static func isNonZero(_ string: String) -> Bool {
+        guard let value = decimal(string) else {
+            return false
+        }
+        return value != 0
     }
 
     private static func decimal(_ string: String) -> Decimal? {
