@@ -25,12 +25,13 @@ struct MockBalanceProvider: BalanceProvider {
     func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
         if let outcome = outcomes[account.id] {
             switch outcome {
-            case let .balance(balance, fetchedAt):
+            case let .balance(balance, breakdown, fetchedAt):
                 return BalanceSnapshot(
                     accountID: account.id,
                     balance: balance,
                     fetchedAt: fetchedAt,
-                    isAvailable: true
+                    isAvailable: true,
+                    breakdown: breakdown
                 )
             case let .failure(error):
                 throw error

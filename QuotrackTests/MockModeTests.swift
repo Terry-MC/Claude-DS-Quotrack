@@ -115,6 +115,32 @@ struct MockModeTests {
     }
 
     @Test
+    func mockDataSourceProvidesBreakdownsForExpandedRowsWhenAvailable() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let personalRow = try #require(
+            monitor.rows.first { $0.account.label == "个人账户" }
+        )
+        #expect(personalRow.snapshot?.breakdown == [
+            BalanceBreakdownItem(kind: .granted, amount: Decimal(string: "28.40")!),
+            BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100.00")!),
+        ])
+        let detail = BalanceRowPresentation.detailViewState(for: personalRow)
+        #expect(detail.breakdown.map(\.label) == ["赠送余额", "充值余额"])
+
+        let balancedRows = monitor.rows.filter { $0.snapshot != nil }
+        #expect(balancedRows.contains { $0.snapshot?.breakdown == nil })
+        #expect(balancedRows.filter { $0.snapshot?.breakdown != nil }.count >= 4)
+    }
+
+    @Test
     func launchModeSelectsFixtureAccountsOnlyInMockMode() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
