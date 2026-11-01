@@ -51,6 +51,27 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
         hasher.combine(category)
     }
 
+    /// The user-facing explanation for this failure. Provider-aware because
+    /// OpenRouter's permission failure needs the management-key message.
+    func userMessage(for provider: Provider) -> String {
+        switch category {
+        case .authentication:
+            UIStrings.authenticationError
+        case .permission:
+            provider == .openRouter
+                ? UIStrings.openRouterManagementKeyError
+                : UIStrings.permissionError
+        case .network:
+            UIStrings.networkError
+        case .rateLimit:
+            UIStrings.rateLimitError
+        case .malformedResponse:
+            UIStrings.malformedResponseError
+        case .unknown:
+            UIStrings.unknownError
+        }
+    }
+
     /// Normalizes any thrown error into the shared categories. Adapters throw
     /// typed errors directly; transport and decoding failures that escape an
     /// adapter are still classified here so the monitor never stores an
