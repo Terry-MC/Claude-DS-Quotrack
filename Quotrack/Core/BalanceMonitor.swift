@@ -32,6 +32,15 @@ protocol BalanceMonitor: AnyObject, Observable {
     func startPolling()
     func stopPolling()
     func refresh() async
+    func refresh(accountID: Account.ID) async
+}
+
+extension BalanceMonitor {
+    /// Refreshes one Account. Its identity is the Account UUID, so callers
+    /// holding a stale Account value still address the right row.
+    func refresh(account: Account) async {
+        await refresh(accountID: account.id)
+    }
 }
 
 @MainActor
@@ -140,13 +149,24 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
     func refresh() async {
         for account in accounts {
-            do {
-                apply(try await provider.fetchBalance(for: account))
-            } catch let error as BalanceProviderError {
-                apply(error, for: account)
-            } catch {
-                apply(.unknown, for: account)
-            }
+            await refreshOne(account)
+        }
+    }
+
+    func refresh(accountID: Account.ID) async {
+        guard let account = accounts.first(where: { $0.id == accountID }) else {
+            return
+        }
+        await refreshOne(account)
+    }
+
+    private func refreshOne(_ account: Account) async {
+        do {
+            apply(try await provider.fetchBalance(for: account))
+        } catch let error as BalanceProviderError {
+            apply(error, for: account)
+        } catch {
+            apply(.unknown, for: account)
         }
     }
 
