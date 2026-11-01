@@ -3,6 +3,8 @@ struct PanelHeaderViewState: Equatable, Sendable {
     let healthyCount: Int
     let errorCount: Int
 
+    var title: String { UIStrings.displayName }
+    var subtitle: String { UIStrings.displaySubtitle }
     var healthyText: String { "正常 \(healthyCount)" }
     var errorText: String { "错误 \(errorCount)" }
 }

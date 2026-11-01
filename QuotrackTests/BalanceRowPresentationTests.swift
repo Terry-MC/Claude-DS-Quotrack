@@ -65,6 +65,27 @@ struct BalanceRowPresentationTests {
     }
 
     @Test
+    func breakdownLabelsUseGlossarySpendAndAvoidQuotaWording() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(id: UUID(), provider: .openRouter, label: "管理账户")
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "74.75")!, currency: .usd),
+            fetchedAt: now,
+            isAvailable: true,
+            breakdown: [
+                BalanceBreakdownItem(kind: .totalCredits, amount: Decimal(string: "100.50")!),
+                BalanceBreakdownItem(kind: .spend, amount: Decimal(string: "25.75")!),
+            ]
+        )
+        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(detail.breakdown.map(\.label) == ["总额", "消费"])
+    }
+
+    @Test
     func rowsRoundToTwoDecimalsWhileDetailKeepsTheOriginalPrecision() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let account = Account(id: UUID(), provider: .moonshot, label: "Kimi 主账号")
@@ -166,6 +187,57 @@ struct BalanceRowPresentationTests {
         #expect(detail.fetchedAtText == nil)
         #expect(detail.breakdown.isEmpty)
         #expect(detail.errorText == nil)
+    }
+
+    @Test(arguments: [
+        (
+            BalanceRowTone.normal,
+            BalanceRowAppearance.Emphasis.positive,
+            BalanceRowAppearance.Emphasis.primary,
+            AggregateBalanceState.normal
+        ),
+        (
+            BalanceRowTone.lowBalance,
+            .warning,
+            .warning,
+            .warning
+        ),
+        (
+            BalanceRowTone.stale,
+            .muted,
+            .secondary,
+            .warning
+        ),
+        (
+            BalanceRowTone.unavailable,
+            .warning,
+            .warning,
+            .warning
+        ),
+        (
+            BalanceRowTone.error,
+            .error,
+            .error,
+            .error
+        ),
+        (
+            BalanceRowTone.pending,
+            .pending,
+            .primary,
+            .normal
+        ),
+    ])
+    func everyToneHasOneAppearanceAndAggregateMapping(
+        tone: BalanceRowTone,
+        status: BalanceRowAppearance.Emphasis,
+        balance: BalanceRowAppearance.Emphasis,
+        aggregate: AggregateBalanceState
+    ) {
+        let appearance = tone.appearance
+
+        #expect(appearance.status == status)
+        #expect(appearance.balance == balance)
+        #expect(appearance.aggregateState == aggregate)
     }
 }
 

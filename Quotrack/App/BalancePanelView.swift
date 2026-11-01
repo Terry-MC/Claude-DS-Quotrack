@@ -1,12 +1,12 @@
 import Foundation
 import SwiftUI
 
-/// The floating panel's content. It observes the concrete BalanceMonitor so
-/// row updates from polling re-render the panel, and renders the view state
-/// derived in the shared core.
+/// The floating panel's content. It depends on the BalanceMonitor seam, so
+/// previews and fakes can supply any row state. Observation still tracks the
+/// concrete @Observable monitor behind the existential at runtime.
 @MainActor
 struct BalancePanelView: View {
-    let monitor: LiveBalanceMonitor
+    let monitor: any BalanceMonitor
     var onAddAccount: () -> Void = {}
     @State private var expansion = BalanceRowExpansion()
 
@@ -35,11 +35,27 @@ struct BalancePanelView: View {
         let header = PanelHeaderPresentation.viewState(for: rows)
         return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(header.title)
+                        .font(.headline)
+                    Text(header.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
                 Text(header.healthyText)
                     .foregroundStyle(.green)
                 Text(header.errorText)
                     .foregroundStyle(.red)
-                Spacer(minLength: 0)
+                Button {
+                    Task { await monitor.refresh() }
+                } label: {
+                    Label(UIStrings.refreshAll, systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .help(UIStrings.refreshAll)
+                .accessibilityLabel(UIStrings.refreshAll)
             }
             .font(.caption.weight(.medium))
             .padding(.horizontal, 14)
@@ -131,26 +147,29 @@ private struct BalanceRowView: View {
         }
     }
 
-    /// Amber for a low Balance, red for an error, gray for Stale, and normal
-    /// green otherwise. The tone is derived in the shared core.
+    private var appearance: BalanceRowAppearance {
+        viewState.tone.appearance
+    }
+
     private var statusColor: Color {
-        switch viewState.tone {
-        case .normal: .green
-        case .lowBalance: .orange
-        case .stale: .gray
-        case .unavailable: .orange
-        case .error: .red
-        case .pending: .secondary
-        }
+        appearance.status.color
     }
 
     private var balanceColor: Color {
-        switch viewState.tone {
-        case .normal: .primary
-        case .lowBalance, .unavailable: .orange
-        case .stale: .secondary
+        appearance.balance.color
+    }
+}
+
+private extension BalanceRowAppearance.Emphasis {
+    var color: Color {
+        switch self {
+        case .primary: .primary
+        case .positive: .green
+        case .warning: .orange
+        case .muted: .gray
+        case .secondary: .secondary
         case .error: .red
-        case .pending: .primary
+        case .pending: .secondary
         }
     }
 }
@@ -229,6 +248,48 @@ private struct BalanceRowDetailView: View {
     BalancePanelView(monitor: monitor)
         .frame(width: 360, height: 420)
         .task { await monitor.refresh() }
+}
+
+#Preview("空状态") {
+    BalancePanelView(monitor: PreviewBalanceMonitor())
+        .frame(width: 360, height: 420)
+}
+
+#Preview("新鲜、过期与错误") {
+    let now = Date()
+    let freshAccount = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+    let staleAccount = Account(id: UUID(), provider: .moonshot, label: "Kimi 主账号")
+    let errorAccount = Account(id: UUID(), provider: .openRouter, label: "OpenRouter 管理")
+    let rows = [
+        BalanceRow(
+            account: freshAccount,
+            snapshot: BalanceSnapshot(
+                accountID: freshAccount.id,
+                balance: Balance(amount: Decimal(string: "128.40")!, currency: .cny),
+                fetchedAt: now.addingTimeInterval(-120),
+                isAvailable: true
+            ),
+            status: .fresh
+        ),
+        BalanceRow(
+            account: staleAccount,
+            snapshot: BalanceSnapshot(
+                accountID: staleAccount.id,
+                balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+                fetchedAt: now.addingTimeInterval(-1_200),
+                isAvailable: true
+            ),
+            status: .stale
+        ),
+        BalanceRow(
+            account: errorAccount,
+            snapshot: nil,
+            status: .error,
+            error: .permission
+        ),
+    ]
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
+        .frame(width: 360, height: 420)
 }
 
 #Preview("展开详情") {

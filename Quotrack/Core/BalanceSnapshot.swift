@@ -34,7 +34,10 @@ struct BalanceBreakdownItem: Codable, Equatable, Sendable, Identifiable {
         case voucher
         case cash
         case totalCredits
-        case usage
+        /// Money consumed over a period. Spend is a different Metric from
+        /// Balance, so the case and label follow GLOSSARY.md even where a
+        /// Provider's wire key calls it `total_usage`.
+        case spend
     }
 
     let kind: Kind

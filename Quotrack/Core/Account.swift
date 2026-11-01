@@ -26,4 +26,28 @@ struct Account: Codable, Identifiable, Equatable, Sendable {
         self.label = label
         self.lowBalanceThreshold = lowBalanceThreshold
     }
+
+    /// Returns a copy with a new label while preserving identity, Provider,
+    /// Region, and threshold.
+    func with(label: String) -> Account {
+        Account(
+            id: id,
+            provider: provider,
+            region: region,
+            label: label,
+            lowBalanceThreshold: lowBalanceThreshold
+        )
+    }
+
+    /// Returns a copy with the low-Balance warning enabled or cleared while
+    /// preserving identity, Provider, Region, and label.
+    func with(lowBalanceThreshold: Decimal?) -> Account {
+        Account(
+            id: id,
+            provider: provider,
+            region: region,
+            label: label,
+            lowBalanceThreshold: lowBalanceThreshold
+        )
+    }
 }

@@ -129,6 +129,8 @@ struct MockModeTests {
                 == Balance(amount: Decimal(string: "0.80")!, currency: .cny)
         )
         #expect(lowBalanceRow.status == .fresh)
+        #expect(lowBalanceRow.account.lowBalanceThreshold == Decimal(string: "5.00"))
+        #expect(BalanceRowPresentation.tone(for: lowBalanceRow) == .lowBalance)
     }
 
     @Test

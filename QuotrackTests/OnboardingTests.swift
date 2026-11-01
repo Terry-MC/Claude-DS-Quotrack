@@ -13,6 +13,17 @@ struct OnboardingTests {
     }
 
     @Test
+    func selectingOpenRouterWarnsAboutTheManagementKeyBeforeSaving() throws {
+        let context = makeContext()
+
+        context.model.selectedProvider = .openRouter
+
+        #expect(context.model.credentialWarning == UIStrings.openRouterManagementKeyWarning)
+        context.model.selectedProvider = .deepSeek
+        #expect(context.model.credentialWarning == nil)
+    }
+
+    @Test
     func aProviderWithoutRegionsGoesStraightToAccountDetails() throws {
         let context = makeContext()
 
@@ -79,9 +90,11 @@ struct OnboardingTests {
         #expect(context.credentials.saveCallCount == 0)
         #expect(context.tester.requests == [
             RecordingConnectionTester.Request(
-                provider: .openRouter,
-                region: nil,
-                credential: "sk-or"
+                draft: AccountDraft(
+                    provider: .openRouter,
+                    label: "管理账户",
+                    credential: "sk-or"
+                )
             )
         ])
     }
@@ -101,7 +114,7 @@ struct OnboardingTests {
         await context.model.submit()
 
         #expect(context.model.step == .details)
-        #expect(context.model.errorMessage == UIStrings.moonshotAuthenticationError)
+        #expect(context.model.errorMessage == UIStrings.regionAuthenticationError)
         #expect(context.model.errorMessage?.contains("区域") == true)
         #expect(context.manager.accounts.isEmpty)
         #expect(context.credentials.saveCallCount == 0)
@@ -132,9 +145,12 @@ struct OnboardingTests {
         #expect(storedCredential == "sk-moonshot")
         #expect(context.tester.requests == [
             RecordingConnectionTester.Request(
-                provider: .moonshot,
-                region: .international,
-                credential: "sk-moonshot"
+                draft: AccountDraft(
+                    provider: .moonshot,
+                    region: .international,
+                    label: "Kimi 国际",
+                    credential: "sk-moonshot"
+                )
             )
         ])
     }

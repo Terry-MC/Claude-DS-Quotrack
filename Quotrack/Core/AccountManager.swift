@@ -21,23 +21,18 @@ final class AccountManager {
     /// identity in the SnapshotStore. A failed metadata write rolls back the
     /// credential so no orphan secret is left behind.
     @discardableResult
-    func addAccount(
-        provider: Provider,
-        region: Region? = nil,
-        label: String,
-        credential: String
-    ) throws -> Account {
-        let trimmedLabel = try validatedLabel(label)
-        guard !credential.isEmpty else {
+    func addAccount(_ draft: AccountDraft) throws -> Account {
+        let trimmedLabel = try validatedLabel(draft.label)
+        guard !draft.credential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
         let account = Account(
             id: UUID(),
-            provider: provider,
-            region: provider.supportsRegion ? (region ?? .domestic) : nil,
+            provider: draft.provider,
+            region: draft.normalizedRegion,
             label: trimmedLabel
         )
-        try credentialStore.save(credential, for: account.id)
+        try credentialStore.save(draft.credential, for: account.id)
         do {
             try store.saveAccounts(accounts + [account])
         } catch {
@@ -55,18 +50,7 @@ final class AccountManager {
             throw AccountManagerError.accountNotFound
         }
         let trimmedLabel = try validatedLabel(label)
-        let current = accounts[index]
-        let updated = Account(
-            id: current.id,
-            provider: current.provider,
-            region: current.region,
-            label: trimmedLabel,
-            lowBalanceThreshold: current.lowBalanceThreshold
-        )
-        var updatedAccounts = accounts
-        updatedAccounts[index] = updated
-        try store.saveAccounts(updatedAccounts)
-        accounts = updatedAccounts
+        try replaceAccount(at: index, with: accounts[index].with(label: trimmedLabel))
     }
 
     /// Enables or clears the Account's low-Balance warning. A threshold must
@@ -81,14 +65,15 @@ final class AccountManager {
         if let threshold, threshold <= 0 {
             throw AccountManagerError.invalidThreshold
         }
-        let current = accounts[index]
-        let updated = Account(
-            id: current.id,
-            provider: current.provider,
-            region: current.region,
-            label: current.label,
-            lowBalanceThreshold: threshold
+        try replaceAccount(
+            at: index,
+            with: accounts[index].with(lowBalanceThreshold: threshold)
         )
+    }
+
+    /// Persists a replacement Account and only then publishes it, so a failed
+    /// write leaves both the in-memory list and the store unchanged.
+    private func replaceAccount(at index: Int, with updated: Account) throws {
         var updatedAccounts = accounts
         updatedAccounts[index] = updated
         try store.saveAccounts(updatedAccounts)

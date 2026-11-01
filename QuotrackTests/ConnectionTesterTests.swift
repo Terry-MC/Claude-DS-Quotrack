@@ -8,9 +8,12 @@ struct ConnectionTesterTests {
 
         for provider in Provider.allCases {
             let snapshot = try await tester.testConnection(
-                provider: provider,
-                region: provider.supportsRegion ? .international : nil,
-                credential: "sk-test"
+                AccountDraft(
+                    provider: provider,
+                    region: provider.supportsRegion ? .international : nil,
+                    label: "账户",
+                    credential: "sk-test"
+                )
             )
             #expect(snapshot.balance.currency == .cny)
             #expect(snapshot.isAvailable)
@@ -24,9 +27,11 @@ struct ConnectionTesterTests {
 
         await #expect(throws: BalanceProviderError.unknown) {
             try await tester.testConnection(
-                provider: .deepSeek,
-                region: nil,
-                credential: "sk-test"
+                AccountDraft(
+                    provider: .deepSeek,
+                    label: "账户",
+                    credential: "sk-test"
+                )
             )
         }
     }

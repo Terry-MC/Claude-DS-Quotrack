@@ -64,7 +64,7 @@ struct DeepSeekAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == nil)
     }
@@ -80,7 +80,7 @@ struct DeepSeekAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 120)
     }
@@ -90,7 +90,7 @@ struct DeepSeekAdapterTests {
         let transport = StubHTTPTransport(error: URLError(.notConnectedToInternet))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .network)
     }
 
@@ -101,7 +101,7 @@ struct DeepSeekAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .malformedResponse)
     }
 
@@ -116,7 +116,7 @@ struct DeepSeekAdapterTests {
         let transport = StubHTTPTransport(response: .json(body: body))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .malformedResponse)
     }
 
@@ -155,7 +155,7 @@ struct DeepSeekAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .unknown)
     }
 
@@ -170,7 +170,7 @@ struct DeepSeekAdapterTests {
             now: { now }
         )
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .authentication)
         #expect(transport.requests.isEmpty)
     }
@@ -212,7 +212,7 @@ struct DeepSeekAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 60)
     }
@@ -245,19 +245,6 @@ struct DeepSeekAdapterTests {
         let snapshot = try await adapter.fetchBalance(for: account)
 
         #expect(snapshot.balance == Balance(amount: Decimal(string: "110.00")!, currency: .cny))
-    }
-
-    private func providerError(from adapter: DeepSeekAdapter) async throws -> BalanceProviderError {
-        do {
-            _ = try await adapter.fetchBalance(for: account)
-            Issue.record("Expected the fetch to fail, but it succeeded.")
-            return .unknown
-        } catch let error as BalanceProviderError {
-            return error
-        } catch {
-            Issue.record("Expected a typed Provider error, got \(error).")
-            return .unknown
-        }
     }
 
     private func makeAdapter(transport: StubHTTPTransport) -> DeepSeekAdapter {

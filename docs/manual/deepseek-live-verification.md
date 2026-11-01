@@ -78,7 +78,7 @@ that a missing or invalid key follows the 401 path the adapter maps to
 ## Status
 
 - Automated fixture coverage: complete (`DeepSeekAdapterTests`,
-  `DeepSeekWiringTests`, `URLSessionTransportTests`).
+  the parameterized `AdapterWiringTests` and `URLSessionTransportTests`).
 - Endpoint reachability and the 401 path: verified without a key.
 - Live verification with a real key: **pending** until a key is supplied in the
   environment or entered by the user during a manual run.

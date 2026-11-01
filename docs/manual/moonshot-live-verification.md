@@ -89,7 +89,7 @@ exercise a successful balance response.
 ## Status
 
 - Automated fixture coverage: complete (`MoonshotAdapterTests`,
-  `MoonshotWiringTests`, `URLSessionTransportTests`).
+  the parameterized `AdapterWiringTests` and `URLSessionTransportTests`).
 - Endpoint reachability and the 401 path: verified without a key.
 - Live verification with a real key: **pending** until a key is supplied in the
   environment or entered by the user during a manual run. No Kimi credential
