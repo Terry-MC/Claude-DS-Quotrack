@@ -39,6 +39,11 @@ extension ProviderRegistry {
                 credentialStore: credentialStore,
                 now: now
             ),
+            .openRouter: OpenRouterAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            ),
         ])
     }
 }
