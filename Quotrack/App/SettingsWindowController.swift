@@ -12,6 +12,7 @@ final class SettingsWindowController {
     init(
         manager: AccountManager,
         settings: SettingsModel,
+        makeConnectionTester: @escaping @MainActor () -> any ConnectionTesting,
         onAccountsChanged: @escaping () -> Void = {}
     ) {
         let contentSize = NSSize(width: 560, height: 620)
@@ -28,6 +29,7 @@ final class SettingsWindowController {
             rootView: SettingsView(
                 manager: manager,
                 settings: settings,
+                makeConnectionTester: makeConnectionTester,
                 onAccountsChanged: onAccountsChanged
             )
         )

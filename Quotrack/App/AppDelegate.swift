@@ -90,6 +90,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsWindowController = SettingsWindowController(
                 manager: accountManager,
                 settings: settingsModel,
+                makeConnectionTester: { [weak self] in
+                    self?.makeConnectionTester()
+                        ?? ProviderRegistryConnectionTester(adapters: [:])
+                },
                 onAccountsChanged: { [weak self] in self?.reloadMonitorAccounts() }
             )
         }

@@ -14,6 +14,7 @@ struct AccountFormView: View {
 
     let mode: Mode
     let manager: AccountManager
+    let connectionTester: any ConnectionTesting
 
     @Environment(\.dismiss) private var dismiss
     @State private var provider: Provider
@@ -23,10 +24,16 @@ struct AccountFormView: View {
     @State private var lowBalanceWarningEnabled: Bool
     @State private var lowBalanceThresholdText: String
     @State private var errorMessage: String?
+    @State private var isSaving = false
 
-    init(mode: Mode, manager: AccountManager) {
+    init(
+        mode: Mode,
+        manager: AccountManager,
+        connectionTester: any ConnectionTesting
+    ) {
         self.mode = mode
         self.manager = manager
+        self.connectionTester = connectionTester
         switch mode {
         case .add:
             _provider = State(initialValue: .deepSeek)
@@ -75,6 +82,12 @@ struct AccountFormView: View {
 
                 TextField("标签", text: $label)
                 SecureField(credentialFieldLabel, text: $credential)
+                if let warning = AccountFormPresentation.credentialWarning(for: provider) {
+                    Text(warning)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 Section(UIStrings.lowBalanceWarningTitle) {
                     Toggle(UIStrings.lowBalanceWarningToggle, isOn: $lowBalanceWarningEnabled)
@@ -106,9 +119,12 @@ struct AccountFormView: View {
                     dismiss()
                 }
                 .keyboardShortcut(.cancelAction)
-                Button("保存", action: save)
+                Button(saveButtonTitle, action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || isSaving
+                    )
             }
         }
         .padding(20)
@@ -129,38 +145,77 @@ struct AccountFormView: View {
         }
     }
 
+    private var saveButtonTitle: String {
+        guard !isSaving else {
+            return UIStrings.onboardingTesting
+        }
+        switch mode {
+        case .add: return UIStrings.onboardingTestAndSave
+        case .edit: return "保存"
+        }
+    }
+
     private func save() {
         guard let threshold = validatedThreshold() else {
             return
         }
+        errorMessage = nil
+        switch mode {
+        case .add:
+            guard !credential.isEmpty else {
+                errorMessage = AccountManagerError.missingCredential.localizedDescription
+                return
+            }
+            let draft = AccountDraft(
+                provider: provider,
+                region: provider.supportsRegion ? region : nil,
+                label: label,
+                credential: credential
+            )
+            isSaving = true
+            Task {
+                await testConnectionAndSave(draft, threshold: threshold)
+            }
+        case let .edit(account):
+            saveEdit(account, threshold: threshold)
+        }
+    }
+
+    /// The add flow tests the credential before writing anything, matching
+    /// onboarding. A rejected credential leaves no Account or Keychain item.
+    private func testConnectionAndSave(
+        _ draft: AccountDraft,
+        threshold: Decimal?
+    ) async {
+        defer { isSaving = false }
+        let creator = AccountCreator(
+            manager: manager,
+            connectionTester: connectionTester
+        )
         do {
-            switch mode {
-            case .add:
-                let account = try manager.addAccount(
-                    provider: provider,
-                    region: provider.supportsRegion ? region : nil,
-                    label: label,
+            _ = try await creator.create(draft, lowBalanceThreshold: threshold)
+            dismiss()
+        } catch {
+            errorMessage = ConnectionErrorMessage.text(
+                for: error,
+                provider: draft.provider
+            )
+        }
+    }
+
+    private func saveEdit(_ account: Account, threshold: Decimal?) {
+        do {
+            try manager.updateLabel(accountID: account.id, label: label)
+            if !credential.isEmpty {
+                try manager.replaceCredential(
+                    accountID: account.id,
                     credential: credential
                 )
-                if let threshold {
-                    try manager.updateLowBalanceThreshold(
-                        accountID: account.id,
-                        threshold: threshold
-                    )
-                }
-            case let .edit(account):
-                try manager.updateLabel(accountID: account.id, label: label)
-                if !credential.isEmpty {
-                    try manager.replaceCredential(
-                        accountID: account.id,
-                        credential: credential
-                    )
-                }
-                try manager.updateLowBalanceThreshold(
-                    accountID: account.id,
-                    threshold: threshold
-                )
             }
+            try manager.updateLowBalanceThreshold(
+                accountID: account.id,
+                threshold: threshold
+            )
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

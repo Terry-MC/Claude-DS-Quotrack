@@ -8,6 +8,9 @@ import SwiftUI
 struct SettingsView: View {
     let manager: AccountManager
     let settings: SettingsModel
+    /// Resolved when the add sheet opens so the tester follows the current
+    /// data-source mode.
+    let makeConnectionTester: @MainActor () -> any ConnectionTesting
     var onAccountsChanged: () -> Void = {}
 
     @State private var sheet: AccountSheet?
@@ -35,7 +38,11 @@ struct SettingsView: View {
             onAccountsChanged()
         }
         .sheet(item: $sheet) { sheet in
-            AccountFormView(mode: sheet.mode, manager: manager)
+            AccountFormView(
+                mode: sheet.mode,
+                manager: manager,
+                connectionTester: makeConnectionTester()
+            )
         }
         .confirmationDialog(
             "删除账户？",

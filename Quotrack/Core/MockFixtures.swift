@@ -29,7 +29,15 @@ enum MockFixtures {
                     BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100.00")!),
                 ]
             ),
-            fixture(provider: .deepSeek, label: "工作账户", amount: "0.80", currency: .cny, age: 60, now: now),
+            fixture(
+                provider: .deepSeek,
+                label: "工作账户",
+                amount: "0.80",
+                currency: .cny,
+                age: 60,
+                now: now,
+                lowBalanceThreshold: Decimal(string: "5.00")!
+            ),
             fixture(
                 provider: .moonshot,
                 label: "Kimi 主账号",
@@ -63,7 +71,7 @@ enum MockFixtures {
                 now: now,
                 breakdown: [
                     BalanceBreakdownItem(kind: .totalCredits, amount: Decimal(string: "30.00")!),
-                    BalanceBreakdownItem(kind: .usage, amount: Decimal(string: "11.25")!),
+                    BalanceBreakdownItem(kind: .spend, amount: Decimal(string: "11.25")!),
                 ]
             ),
             failure(provider: .deepSeek, label: "DeepSeek 限流", error: .rateLimit),
@@ -98,9 +106,15 @@ enum MockFixtures {
         currency: Currency,
         age: TimeInterval,
         now: Date,
-        breakdown: [BalanceBreakdownItem]? = nil
+        breakdown: [BalanceBreakdownItem]? = nil,
+        lowBalanceThreshold: Decimal? = nil
     ) -> MockFixture {
-        let account = Account(id: UUID(), provider: provider, label: label)
+        let account = Account(
+            id: UUID(),
+            provider: provider,
+            label: label,
+            lowBalanceThreshold: lowBalanceThreshold
+        )
         return MockFixture(
             account: account,
             outcome: .balance(

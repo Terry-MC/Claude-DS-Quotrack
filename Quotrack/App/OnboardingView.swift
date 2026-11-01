@@ -71,6 +71,13 @@ struct OnboardingView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let warning = model.credentialWarning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -96,6 +103,12 @@ struct OnboardingView: View {
                 .textFieldStyle(.roundedBorder)
             SecureField(UIStrings.onboardingCredentialField, text: $model.credential)
                 .textFieldStyle(.roundedBorder)
+            if let warning = model.credentialWarning {
+                Text(warning)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(UIStrings.onboardingCredentialHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)

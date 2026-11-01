@@ -23,6 +23,12 @@ final class OnboardingModel {
     private(set) var errorMessage: String?
     private(set) var completedAccount: Account?
 
+    /// Warning shown before the credential is entered or saved. Currently only
+    /// OpenRouter needs a management key instead of an inference key.
+    var credentialWarning: String? {
+        AccountFormPresentation.credentialWarning(for: selectedProvider)
+    }
+
     @ObservationIgnored private let accountManager: AccountManager
     @ObservationIgnored private let connectionTester: any ConnectionTesting
 
@@ -78,31 +84,20 @@ final class OnboardingModel {
         errorMessage = nil
         step = .testing
         let provider = selectedProvider
-        let region = provider.supportsRegion ? selectedRegion : nil
+        let draft = AccountDraft(
+            provider: provider,
+            region: provider.supportsRegion ? selectedRegion : nil,
+            label: trimmedLabel,
+            credential: credential
+        )
         do {
-            _ = try await connectionTester.testConnection(
-                provider: provider,
-                region: region,
-                credential: credential
-            )
-            let account = try accountManager.addAccount(
-                provider: provider,
-                region: region,
-                label: trimmedLabel,
-                credential: credential
-            )
+            _ = try await connectionTester.testConnection(draft)
+            let account = try accountManager.addAccount(draft)
             completedAccount = account
             step = .completed
         } catch {
-            errorMessage = Self.userMessage(for: error, provider: provider)
+            errorMessage = ConnectionErrorMessage.text(for: error, provider: provider)
             step = .details
         }
-    }
-
-    private static func userMessage(for error: any Error, provider: Provider) -> String {
-        if let balanceError = error as? BalanceProviderError {
-            return balanceError.userMessage(for: provider)
-        }
-        return error.localizedDescription
     }
 }
