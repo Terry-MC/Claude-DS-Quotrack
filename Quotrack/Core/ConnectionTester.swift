@@ -85,12 +85,17 @@ extension ProviderRegistryConnectionTester {
                 credentialStore: credentialStore,
                 now: now
             ),
-            .openRouter: OpenRouterAdapter(
+            .moonshot: MoonshotAdapter(
                 transport: transport,
                 credentialStore: credentialStore,
                 now: now
             ),
             .siliconFlow: SiliconFlowAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            ),
+            .openRouter: OpenRouterAdapter(
                 transport: transport,
                 credentialStore: credentialStore,
                 now: now

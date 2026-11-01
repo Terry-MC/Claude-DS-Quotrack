@@ -30,11 +30,7 @@ struct DeepSeekWiringTests {
 
     @Test
     func providersWithoutAnAdapterStillFailHonestly() async {
-        let registry = ProviderRegistry.live(
-            credentialStore: credentials(),
-            transport: StubHTTPTransport(response: .json(body: DeepSeekFixtures.success)),
-            now: { now }
-        )
+        let registry = ProviderRegistry(adapters: [:])
         let moonshotAccount = Account(id: UUID(), provider: .moonshot, label: "Kimi")
 
         await #expect(throws: BalanceProviderError.unknown) {

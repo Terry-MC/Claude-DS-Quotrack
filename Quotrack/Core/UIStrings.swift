@@ -16,6 +16,7 @@ enum UIStrings {
 
     // Typed error detail
     static let authenticationError = "认证失败，请检查 API 密钥。"
+    static let moonshotAuthenticationError = "认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。"
     static let permissionError = "权限不足，请检查密钥权限。"
     static let openRouterManagementKeyError = "权限不足，OpenRouter 需要管理密钥。"
     static let networkError = "网络错误，请检查网络连接。"
