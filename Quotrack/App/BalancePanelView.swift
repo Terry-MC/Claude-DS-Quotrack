@@ -99,6 +99,7 @@ private struct BalanceRowView: View {
                         Text(viewState.balanceText)
                             .font(.title3)
                             .monospacedDigit()
+                            .foregroundStyle(balanceColor)
                         HStack(spacing: 4) {
                             Text(viewState.updatedText)
                                 .foregroundStyle(.secondary)
@@ -130,13 +131,26 @@ private struct BalanceRowView: View {
         }
     }
 
+    /// Amber for a low Balance, red for an error, gray for Stale, and normal
+    /// green otherwise. The tone is derived in the shared core.
     private var statusColor: Color {
-        switch viewState.status {
-        case .some(.fresh): .green
-        case .some(.stale): .gray
-        case .some(.unavailable): .orange
-        case .some(.error): .red
-        case .none: .secondary
+        switch viewState.tone {
+        case .normal: .green
+        case .lowBalance: .orange
+        case .stale: .gray
+        case .unavailable: .orange
+        case .error: .red
+        case .pending: .secondary
+        }
+    }
+
+    private var balanceColor: Color {
+        switch viewState.tone {
+        case .normal: .primary
+        case .lowBalance, .unavailable: .orange
+        case .stale: .secondary
+        case .error: .red
+        case .pending: .primary
         }
     }
 }
