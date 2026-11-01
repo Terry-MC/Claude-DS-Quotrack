@@ -71,6 +71,17 @@ final class AccountManager {
         }
         try credentialStore.save(credential, for: accountID)
     }
+
+    /// Removes the Keychain item first so no orphan secret can survive, then
+    /// the Account metadata and its persisted Snapshot through the store.
+    func deleteAccount(id: Account.ID) throws {
+        guard accounts.contains(where: { $0.id == id }) else {
+            throw AccountManagerError.accountNotFound
+        }
+        try credentialStore.deleteCredential(for: id)
+        try store.deleteAccount(id: id)
+        accounts.removeAll { $0.id == id }
+    }
 }
 
 enum AccountManagerError: Error, Equatable, LocalizedError {

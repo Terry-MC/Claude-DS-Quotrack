@@ -147,6 +147,48 @@ struct AccountManagerTests {
         #expect(storedCredential == "sk-new")
         #expect(store.loadSnapshots() == [account.id: snapshot])
     }
+
+    @Test
+    func deletingAnAccountRemovesItsCredentialMetadataAndSnapshot() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let kept = try manager.addAccount(
+            provider: .deepSeek,
+            label: "保留账户",
+            credential: "sk-keep"
+        )
+        let deleted = try manager.addAccount(
+            provider: .moonshot,
+            region: .international,
+            label: "删除账户",
+            credential: "sk-delete"
+        )
+        let keptSnapshot = BalanceSnapshot(
+            accountID: kept.id,
+            balance: Balance(amount: Decimal(string: "12.00")!, currency: .cny),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        let deletedSnapshot = BalanceSnapshot(
+            accountID: deleted.id,
+            balance: Balance(amount: Decimal(string: "9.00")!, currency: .usd),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        try store.saveSnapshot(keptSnapshot)
+        try store.saveSnapshot(deletedSnapshot)
+
+        try manager.deleteAccount(id: deleted.id)
+
+        #expect(manager.accounts == [kept])
+        #expect(store.loadAccounts() == [kept])
+        let deletedCredential = try credentials.credential(for: deleted.id)
+        #expect(deletedCredential == nil)
+        let keptCredential = try credentials.credential(for: kept.id)
+        #expect(keptCredential == "sk-keep")
+        #expect(store.loadSnapshots() == [kept.id: keptSnapshot])
+    }
 }
 
 private func makeTemporaryDirectory() throws -> URL {
