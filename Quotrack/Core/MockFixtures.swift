@@ -23,6 +23,11 @@ enum MockFixtures {
             fixture(provider: .siliconFlow, label: "SiliconFlow 国内", amount: "15.00", currency: .cny, age: 180, now: now),
             fixture(provider: .openRouter, label: "OpenRouter 管理", amount: "18.75", currency: .usd, age: 240, now: now),
             failure(provider: .deepSeek, label: "DeepSeek 限流", error: .rateLimit),
+            failure(
+                provider: .deepSeek,
+                label: "DeepSeek 限流重试",
+                error: .rateLimit(retryAfter: 120)
+            ),
             failure(provider: .moonshot, label: "Kimi 网络异常", error: .network),
             failure(provider: .siliconFlow, label: "SiliconFlow 认证失败", error: .authentication),
             failure(provider: .siliconFlow, label: "SiliconFlow 响应异常", error: .malformedResponse),

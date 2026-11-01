@@ -51,6 +51,23 @@ struct MockModeTests {
     }
 
     @Test
+    func mockDataSourceIncludesRateLimitsWithAndWithoutRetryAfter() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let rateLimitRows = monitor.rows.filter { $0.error?.category == .rateLimit }
+        #expect(rateLimitRows.count >= 2)
+        #expect(rateLimitRows.contains { $0.error?.retryAfter == nil })
+        #expect(rateLimitRows.contains { $0.error?.retryAfter == 120 })
+    }
+
+    @Test
     func headerCountsHealthyAndErrorAccounts() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let monitor = LiveBalanceMonitor(
@@ -63,9 +80,9 @@ struct MockModeTests {
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
         #expect(header.healthyCount == 4)
-        #expect(header.errorCount == 6)
+        #expect(header.errorCount == 7)
         #expect(header.healthyText == "正常 4")
-        #expect(header.errorText == "错误 6")
+        #expect(header.errorText == "错误 7")
     }
 
     @Test
@@ -121,7 +138,7 @@ struct MockModeTests {
         let mockSource = BalanceDataSource.make(mode: .mock, now: now)
         let liveSource = BalanceDataSource.make(mode: .live, now: now)
 
-        #expect(mockSource.accounts.count == 11)
+        #expect(mockSource.accounts.count == 12)
         #expect(Set(mockSource.accounts.map(\.provider)) == Set(Provider.allCases))
         #expect(liveSource.accounts.isEmpty)
     }
