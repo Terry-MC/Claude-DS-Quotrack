@@ -126,6 +126,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 if Task.isCancelled {
                     return
                 }
+                self.refreshStatuses()
                 await self.refresh()
             }
         }
@@ -228,16 +229,8 @@ final class LiveBalanceMonitor: BalanceMonitor {
         rows[index] = BalanceRow(
             account: rows[index].account,
             snapshot: snapshot,
-            status: status(for: snapshot)
+            status: status(for: snapshot, error: nil, at: now())
         )
-    }
-
-    private func status(for snapshot: BalanceSnapshot) -> SnapshotStatus {
-        guard snapshot.isAvailable else {
-            return .unavailable
-        }
-        let age = now().timeIntervalSince(snapshot.fetchedAt)
-        return age > 3 * pollingInterval ? .stale : .fresh
     }
 
     private func apply(_ error: BalanceProviderError, for account: Account) {
@@ -247,9 +240,55 @@ final class LiveBalanceMonitor: BalanceMonitor {
         rows[index] = BalanceRow(
             account: rows[index].account,
             snapshot: rows[index].snapshot,
-            status: .error,
+            status: status(for: rows[index].snapshot, error: error, at: now()),
             error: error
         )
+    }
+
+    /// Re-derives freshness from Snapshot age, so a row becomes Stale as time
+    /// passes even when no fetch succeeds.
+    private func refreshStatuses() {
+        let now = now()
+        var updated = rows
+        var changed = false
+        for index in updated.indices {
+            let row = updated[index]
+            let newStatus = status(for: row.snapshot, error: row.error, at: now)
+            guard newStatus != row.status else {
+                continue
+            }
+            updated[index] = BalanceRow(
+                account: row.account,
+                snapshot: row.snapshot,
+                status: newStatus,
+                error: row.error
+            )
+            changed = true
+        }
+        if changed {
+            rows = updated
+        }
+    }
+
+    /// A Snapshot older than three Polling Intervals is Stale regardless of the
+    /// last fetch outcome; the last known Balance stays visible. Before that
+    /// threshold, an error is surfaced as an error.
+    private func status(
+        for snapshot: BalanceSnapshot?,
+        error: BalanceProviderError?,
+        at now: Date
+    ) -> SnapshotStatus? {
+        guard let snapshot else {
+            return error == nil ? nil : .error
+        }
+        guard snapshot.isAvailable else {
+            return .unavailable
+        }
+        let age = now.timeIntervalSince(snapshot.fetchedAt)
+        if age >= 3 * pollingInterval {
+            return .stale
+        }
+        return error == nil ? .fresh : .error
     }
 }
 
