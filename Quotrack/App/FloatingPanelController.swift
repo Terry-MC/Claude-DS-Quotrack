@@ -5,7 +5,7 @@ import SwiftUI
 final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
 
-    init(monitor: any BalanceMonitor) {
+    init(monitor: LiveBalanceMonitor) {
         let contentSize = NSSize(width: 360, height: 420)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),

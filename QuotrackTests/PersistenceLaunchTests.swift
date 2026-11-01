@@ -208,7 +208,7 @@ struct PersistenceLaunchTests {
         )
         await monitor.switchDataSource(.mock(now: now), store: nil)
 
-        #expect(mockSource.accounts.count == 11)
+        #expect(mockSource.accounts.count == 12)
         #expect(!mockSource.accounts.contains { $0.id == realAccount.id })
         #expect(store.loadSnapshots() == [realAccount.id: persisted])
     }

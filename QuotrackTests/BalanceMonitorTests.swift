@@ -92,6 +92,73 @@ struct BalanceMonitorTests {
     }
 
     @Test
+    func perAccountRefreshPublishesItsRowChange() async throws {
+        let account = Account(id: UUID(), provider: .moonshot, label: "Kimi 主账号")
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        let monitor = LiveBalanceMonitor(
+            provider: FakeBalanceProvider(snapshot: snapshot),
+            accounts: [account]
+        )
+
+        await confirmation("per-account row update observed") { confirm in
+            withObservationTracking {
+                _ = monitor.rows
+            } onChange: {
+                confirm()
+            }
+            await monitor.refresh(accountID: account.id)
+        }
+
+        #expect(monitor.rows.first?.snapshot == snapshot)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func pollingPublishesRowChangesToObservers() async throws {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let clock = TestPollingClock(now: start)
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let gate = AsyncGate()
+        let provider = RecordingBalanceProvider { account in
+            await gate.wait()
+            return BalanceSnapshot(
+                accountID: account.id,
+                balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+                fetchedAt: clock.now,
+                isAvailable: true
+            )
+        }
+        let monitor = LiveBalanceMonitor(
+            provider: provider,
+            accounts: [account],
+            pollingInterval: 300,
+            clock: clock
+        )
+        monitor.startPolling()
+        await clock.waitForSleepCount(1)
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            withObservationTracking {
+                _ = monitor.rows
+            } onChange: {
+                continuation.resume()
+            }
+            Task {
+                clock.advance(by: 300)
+                await provider.waitForStartedCount(1)
+                await gate.open()
+            }
+        }
+
+        #expect(monitor.rows.first?.snapshot != nil)
+        monitor.stopPolling()
+    }
+
+    @Test
     func rowChangesNotifyObserversThroughTheMonitorSeam() async throws {
         let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
         let snapshot = BalanceSnapshot(

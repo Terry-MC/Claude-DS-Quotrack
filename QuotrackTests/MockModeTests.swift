@@ -51,6 +51,23 @@ struct MockModeTests {
     }
 
     @Test
+    func mockDataSourceIncludesRateLimitsWithAndWithoutRetryAfter() async {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let rateLimitRows = monitor.rows.filter { $0.error?.category == .rateLimit }
+        #expect(rateLimitRows.count >= 2)
+        #expect(rateLimitRows.contains { $0.error?.retryAfter == nil })
+        #expect(rateLimitRows.contains { $0.error?.retryAfter == 120 })
+    }
+
+    @Test
     func headerCountsHealthyAndErrorAccounts() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let monitor = LiveBalanceMonitor(
@@ -63,9 +80,9 @@ struct MockModeTests {
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
         #expect(header.healthyCount == 4)
-        #expect(header.errorCount == 6)
+        #expect(header.errorCount == 7)
         #expect(header.healthyText == "正常 4")
-        #expect(header.errorText == "错误 6")
+        #expect(header.errorText == "错误 7")
     }
 
     @Test
@@ -115,13 +132,39 @@ struct MockModeTests {
     }
 
     @Test
+    func mockDataSourceProvidesBreakdownsForExpandedRowsWhenAvailable() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let personalRow = try #require(
+            monitor.rows.first { $0.account.label == "个人账户" }
+        )
+        #expect(personalRow.snapshot?.breakdown == [
+            BalanceBreakdownItem(kind: .granted, amount: Decimal(string: "28.40")!),
+            BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100.00")!),
+        ])
+        let detail = BalanceRowPresentation.detailViewState(for: personalRow)
+        #expect(detail.breakdown.map(\.label) == ["赠送余额", "充值余额"])
+
+        let balancedRows = monitor.rows.filter { $0.snapshot != nil }
+        #expect(balancedRows.contains { $0.snapshot?.breakdown == nil })
+        #expect(balancedRows.filter { $0.snapshot?.breakdown != nil }.count >= 4)
+    }
+
+    @Test
     func launchModeSelectsFixtureAccountsOnlyInMockMode() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
 
         let mockSource = BalanceDataSource.make(mode: .mock, now: now)
         let liveSource = BalanceDataSource.make(mode: .live, now: now)
 
-        #expect(mockSource.accounts.count == 11)
+        #expect(mockSource.accounts.count == 12)
         #expect(Set(mockSource.accounts.map(\.provider)) == Set(Provider.allCases))
         #expect(liveSource.accounts.isEmpty)
     }

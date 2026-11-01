@@ -24,7 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.accountManager = accountManager
         let monitor = LiveBalanceMonitor(
             dataSource: BalanceDataSource.make(mode: dataSourceMode, store: store),
-            store: dataSourceMode == .live ? store : nil
+            store: dataSourceMode == .live ? store : nil,
+            sleepWakeObserver: NSWorkspaceSleepWakeObserver()
         )
         self.monitor = monitor
 

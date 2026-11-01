@@ -10,7 +10,7 @@ final class MenuBarController: NSObject {
     var onOpenSettings: (() -> Void)?
     var onSwitchDataSource: (() -> Void)?
 
-    init(monitor: any BalanceMonitor) {
+    init(monitor: LiveBalanceMonitor) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let panelController = FloatingPanelController(monitor: monitor)
         let menu = NSMenu()
