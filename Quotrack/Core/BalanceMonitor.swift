@@ -50,7 +50,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
     var pollingInterval: TimeInterval {
         get { configuredPollingInterval }
-        set { configuredPollingInterval = newValue }
+        set {
+            guard newValue != configuredPollingInterval else {
+                return
+            }
+            configuredPollingInterval = newValue
+            guard pollingTask != nil else {
+                return
+            }
+            restartPolling()
+        }
     }
 
     init(
@@ -110,6 +119,14 @@ final class LiveBalanceMonitor: BalanceMonitor {
     func stopPolling() {
         pollingTask?.cancel()
         pollingTask = nil
+    }
+
+    /// Applies an interval change to the pending wait instead of waiting out
+    /// the previous interval first.
+    private func restartPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        startPolling()
     }
 
     /// Swaps only the Accounts and Provider adapter. The monitor, its polling

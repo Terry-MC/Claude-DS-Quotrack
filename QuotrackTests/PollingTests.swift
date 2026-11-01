@@ -48,6 +48,39 @@ struct PollingTests {
 
         monitor.stopPolling()
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func changingPollingIntervalReschedulesThePendingWait() async {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let clock = TestPollingClock(now: start)
+        let account = Account(id: UUID(), provider: .moonshot, label: "Kimi 主账号")
+        let provider = RecordingBalanceProvider { account in
+            BalanceSnapshot(
+                accountID: account.id,
+                balance: Balance(amount: Decimal(string: "12.00")!, currency: .cny),
+                fetchedAt: clock.now,
+                isAvailable: true
+            )
+        }
+        let monitor = LiveBalanceMonitor(
+            provider: provider,
+            accounts: [account],
+            pollingInterval: 300,
+            clock: clock
+        )
+
+        monitor.startPolling()
+        await clock.waitForSleepCount(1)
+
+        monitor.pollingInterval = 60
+        await clock.waitForSleepCount(2)
+
+        clock.advance(by: 60)
+        await provider.waitForStartedCount(1)
+
+        #expect(provider.startedCount == 1)
+        monitor.stopPolling()
+    }
 }
 
 private struct NoopProvider: BalanceProvider {
