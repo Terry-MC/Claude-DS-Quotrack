@@ -13,7 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .parse(arguments: ProcessInfo.processInfo.arguments)
             .dataSourceMode
         let monitor = LiveBalanceMonitor(
-            dataSource: BalanceDataSource.make(mode: dataSourceMode)
+            dataSource: BalanceDataSource.make(mode: dataSourceMode),
+            sleepWakeObserver: NSWorkspaceSleepWakeObserver()
         )
         self.monitor = monitor
 

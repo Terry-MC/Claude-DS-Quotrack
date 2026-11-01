@@ -66,11 +66,14 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private var configuredPollingInterval: TimeInterval
     private let clock: any PollingClock
     private let now: @Sendable () -> Date
+    private let sleepWakeObserver: any SleepWakeObserving
     @ObservationIgnored private let limiter = FetchLimiter(
         capacity: LiveBalanceMonitor.maxConcurrentFetches
     )
     @ObservationIgnored private var schedules: [Account.ID: AccountSchedule]
     private var pollingTask: Task<Void, Never>?
+    private var isPollingActive = false
+    private var isSleeping = false
     private(set) var rows: [BalanceRow]
 
     var pollingInterval: TimeInterval {
@@ -90,7 +93,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 schedules[account.id] = schedule
             }
             refreshStatuses(at: now)
-            guard pollingTask != nil else {
+            guard isPollingActive, !isSleeping else {
                 return
             }
             restartPolling()
@@ -102,13 +105,15 @@ final class LiveBalanceMonitor: BalanceMonitor {
         accounts: [Account],
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
-        now: (@Sendable () -> Date)? = nil
+        now: (@Sendable () -> Date)? = nil,
+        sleepWakeObserver: any SleepWakeObserving = NoopSleepWakeObserver()
     ) {
         self.provider = provider
         self.accounts = accounts
         self.configuredPollingInterval = pollingInterval
         self.clock = clock
         self.now = now ?? { clock.now }
+        self.sleepWakeObserver = sleepWakeObserver
         self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
         let firstAttempt = clock.now.addingTimeInterval(pollingInterval)
         self.schedules = Dictionary(
@@ -122,25 +127,68 @@ final class LiveBalanceMonitor: BalanceMonitor {
         dataSource: BalanceDataSource,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
-        now: (@Sendable () -> Date)? = nil
+        now: (@Sendable () -> Date)? = nil,
+        sleepWakeObserver: any SleepWakeObserving = NoopSleepWakeObserver()
     ) {
         self.init(
             provider: dataSource.provider,
             accounts: dataSource.accounts,
             pollingInterval: pollingInterval,
             clock: clock,
-            now: now
+            now: now,
+            sleepWakeObserver: sleepWakeObserver
         )
     }
 
     /// Starts the automatic refresh loop. The first fetch happens after one
     /// Polling Interval; launch-time and manual refreshes are separate.
     func startPolling() {
-        guard pollingTask == nil else {
+        guard !isPollingActive else {
+            return
+        }
+        isPollingActive = true
+        isSleeping = false
+        sleepWakeObserver.start { [weak self] event in
+            self?.handleSleepWake(event)
+        }
+        startPollingTask()
+    }
+
+    private func startPollingTask() {
+        guard pollingTask == nil, isPollingActive, !isSleeping else {
             return
         }
         pollingTask = Task { [weak self] in
             await self?.runPollingLoop()
+        }
+    }
+
+    /// Suspends scheduling while the Mac sleeps and refreshes every Account
+    /// immediately on wake before automatic polling resumes.
+    private func handleSleepWake(_ event: SleepWakeEvent) {
+        switch event {
+        case .willSleep:
+            guard isPollingActive else {
+                return
+            }
+            isSleeping = true
+            pollingTask?.cancel()
+            pollingTask = nil
+        case .didWake:
+            guard isPollingActive else {
+                return
+            }
+            isSleeping = false
+            Task { [weak self] in
+                guard let self else {
+                    return
+                }
+                await self.refresh()
+                guard self.isPollingActive, !self.isSleeping else {
+                    return
+                }
+                self.startPollingTask()
+            }
         }
     }
 
@@ -193,8 +241,11 @@ final class LiveBalanceMonitor: BalanceMonitor {
     }
 
     func stopPolling() {
+        isPollingActive = false
+        isSleeping = false
         pollingTask?.cancel()
         pollingTask = nil
+        sleepWakeObserver.stop()
     }
 
     /// Applies an interval change to the pending wait instead of waiting out
@@ -202,7 +253,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private func restartPolling() {
         pollingTask?.cancel()
         pollingTask = nil
-        startPolling()
+        startPollingTask()
     }
 
     /// Swaps only the Accounts and Provider adapter. The monitor, its polling
