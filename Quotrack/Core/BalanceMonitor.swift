@@ -28,41 +28,120 @@ struct BalanceRow: Identifiable, Equatable, Sendable {
 @MainActor
 protocol BalanceMonitor: AnyObject, Observable {
     var rows: [BalanceRow] { get }
+    var pollingInterval: TimeInterval { get set }
+    func startPolling()
+    func stopPolling()
     func refresh() async
+    func refresh(accountID: Account.ID) async
+}
+
+extension BalanceMonitor {
+    /// Refreshes one Account. Its identity is the Account UUID, so callers
+    /// holding a stale Account value still address the right row.
+    func refresh(account: Account) async {
+        await refresh(accountID: account.id)
+    }
 }
 
 @MainActor
 @Observable
 final class LiveBalanceMonitor: BalanceMonitor {
+    /// The Polling Interval used when the caller does not configure one.
+    static let defaultPollingInterval: TimeInterval = 5 * 60
+
+    /// The global number of Provider fetches allowed in flight at once.
+    static let maxConcurrentFetches = 3
+
     private var provider: any BalanceProvider
     private var accounts: [Account]
-    private let pollingInterval: TimeInterval
+    private var configuredPollingInterval: TimeInterval
+    private let clock: any PollingClock
     private let now: @Sendable () -> Date
+    @ObservationIgnored private let limiter = FetchLimiter(
+        capacity: LiveBalanceMonitor.maxConcurrentFetches
+    )
+    private var pollingTask: Task<Void, Never>?
     private(set) var rows: [BalanceRow]
+
+    var pollingInterval: TimeInterval {
+        get { configuredPollingInterval }
+        set {
+            guard newValue != configuredPollingInterval else {
+                return
+            }
+            configuredPollingInterval = newValue
+            guard pollingTask != nil else {
+                return
+            }
+            restartPolling()
+        }
+    }
 
     init(
         provider: any BalanceProvider,
         accounts: [Account],
-        pollingInterval: TimeInterval = 5 * 60,
-        now: @escaping @Sendable () -> Date = { Date() }
+        pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
+        clock: any PollingClock = SystemPollingClock(),
+        now: (@Sendable () -> Date)? = nil
     ) {
         self.provider = provider
         self.accounts = accounts
-        self.pollingInterval = pollingInterval
-        self.now = now
+        self.configuredPollingInterval = pollingInterval
+        self.clock = clock
+        self.now = now ?? { clock.now }
         self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
     }
 
-    init(
+    convenience init(
         dataSource: BalanceDataSource,
-        pollingInterval: TimeInterval = 5 * 60,
-        now: @escaping @Sendable () -> Date = { Date() }
+        pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
+        clock: any PollingClock = SystemPollingClock(),
+        now: (@Sendable () -> Date)? = nil
     ) {
-        self.provider = dataSource.provider
-        self.accounts = dataSource.accounts
-        self.pollingInterval = pollingInterval
-        self.now = now
-        self.rows = dataSource.accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.init(
+            provider: dataSource.provider,
+            accounts: dataSource.accounts,
+            pollingInterval: pollingInterval,
+            clock: clock,
+            now: now
+        )
+    }
+
+    /// Starts the periodic refresh loop. The first fetch happens after one
+    /// Polling Interval; launch-time and manual refreshes are separate.
+    func startPolling() {
+        guard pollingTask == nil else {
+            return
+        }
+        pollingTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else {
+                    return
+                }
+                do {
+                    try await self.clock.sleep(for: .seconds(self.pollingInterval))
+                } catch {
+                    return
+                }
+                if Task.isCancelled {
+                    return
+                }
+                await self.refresh()
+            }
+        }
+    }
+
+    func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
+
+    /// Applies an interval change to the pending wait instead of waiting out
+    /// the previous interval first.
+    private func restartPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+        startPolling()
     }
 
     /// Swaps only the Accounts and Provider adapter. The monitor, its polling
@@ -74,15 +153,71 @@ final class LiveBalanceMonitor: BalanceMonitor {
         await refresh()
     }
 
+    /// Refreshes every Account concurrently, bounded by the global fetch cap.
+    /// Results are applied as they arrive, so one slow Account never delays
+    /// the rows of the others.
     func refresh() async {
-        for account in accounts {
-            do {
-                apply(try await provider.fetchBalance(for: account))
-            } catch let error as BalanceProviderError {
-                apply(error, for: account)
-            } catch {
-                apply(.unknown, for: account)
+        let accounts = self.accounts
+        let provider = self.provider
+        let limiter = self.limiter
+        await withTaskGroup(of: FetchResult.self) { group in
+            for account in accounts {
+                group.addTask {
+                    await Self.fetch(account, using: provider, limiter: limiter)
+                }
             }
+            for await result in group {
+                apply(result)
+            }
+        }
+    }
+
+    /// Refreshes exactly one Account, sharing the same fetch cap as polling.
+    func refresh(accountID: Account.ID) async {
+        guard let account = accounts.first(where: { $0.id == accountID }) else {
+            return
+        }
+        let result = await Self.fetch(account, using: provider, limiter: limiter)
+        apply(result)
+    }
+
+    private nonisolated static func fetch(
+        _ account: Account,
+        using provider: any BalanceProvider,
+        limiter: FetchLimiter
+    ) async -> FetchResult {
+        do {
+            try await limiter.acquire()
+        } catch {
+            return FetchResult(account: account, outcome: .cancelled)
+        }
+
+        if Task.isCancelled {
+            await limiter.release()
+            return FetchResult(account: account, outcome: .cancelled)
+        }
+
+        let outcome: FetchOutcome
+        do {
+            let snapshot = try await provider.fetchBalance(for: account)
+            outcome = .snapshot(snapshot)
+        } catch {
+            outcome = Task.isCancelled
+                ? .cancelled
+                : .failure(BalanceProviderError.classify(error))
+        }
+        await limiter.release()
+        return FetchResult(account: account, outcome: outcome)
+    }
+
+    private func apply(_ result: FetchResult) {
+        switch result.outcome {
+        case let .snapshot(snapshot):
+            apply(snapshot)
+        case let .failure(error):
+            apply(error, for: result.account)
+        case .cancelled:
+            break
         }
     }
 
@@ -116,4 +251,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
             error: error
         )
     }
+}
+
+/// What one Provider fetch produced, independent of which Account's task ran.
+private enum FetchOutcome: Sendable {
+    case snapshot(BalanceSnapshot)
+    case failure(BalanceProviderError)
+    case cancelled
+}
+
+private struct FetchResult: Sendable {
+    let account: Account
+    let outcome: FetchOutcome
 }
