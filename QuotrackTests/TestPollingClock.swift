@@ -32,6 +32,14 @@ final class TestPollingClock: PollingClock, @unchecked Sendable {
         return registeredSleepCount
     }
 
+    /// The earliest deadline any pending sleep will resolve at. Lets tests
+    /// assert a backoff or staleness schedule without driving the clock.
+    var nextSleepDeadline: Date? {
+        lock.lock()
+        defer { lock.unlock() }
+        return sleepers.map(\.deadline).min()
+    }
+
     func sleep(for duration: Duration) async throws {
         let deadline = now.addingTimeInterval(duration.timeInterval)
         let id = UUID()

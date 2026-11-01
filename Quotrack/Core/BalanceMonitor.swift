@@ -52,6 +52,15 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// The global number of Provider fetches allowed in flight at once.
     static let maxConcurrentFetches = 3
 
+    /// Delays after consecutive failures: 1, 2, 5, then 15 minutes, capped.
+    static let backoffDelays: [TimeInterval] = [60, 120, 300, 900]
+
+    /// One Account's independent automatic-refresh schedule.
+    private struct AccountSchedule {
+        var consecutiveFailures = 0
+        var nextAutomaticAttemptAt: Date
+    }
+
     private var provider: any BalanceProvider
     private var accounts: [Account]
     private var configuredPollingInterval: TimeInterval
@@ -60,6 +69,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     @ObservationIgnored private let limiter = FetchLimiter(
         capacity: LiveBalanceMonitor.maxConcurrentFetches
     )
+    @ObservationIgnored private var schedules: [Account.ID: AccountSchedule]
     private var pollingTask: Task<Void, Never>?
     private(set) var rows: [BalanceRow]
 
@@ -70,6 +80,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 return
             }
             configuredPollingInterval = newValue
+            let now = now()
+            for account in accounts {
+                guard var schedule = schedules[account.id],
+                      schedule.consecutiveFailures == 0 else {
+                    continue
+                }
+                schedule.nextAutomaticAttemptAt = now.addingTimeInterval(newValue)
+                schedules[account.id] = schedule
+            }
+            refreshStatuses(at: now)
             guard pollingTask != nil else {
                 return
             }
@@ -90,6 +110,12 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.clock = clock
         self.now = now ?? { clock.now }
         self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        let firstAttempt = clock.now.addingTimeInterval(pollingInterval)
+        self.schedules = Dictionary(
+            uniqueKeysWithValues: accounts.map {
+                ($0.id, AccountSchedule(nextAutomaticAttemptAt: firstAttempt))
+            }
+        )
     }
 
     convenience init(
@@ -107,29 +133,63 @@ final class LiveBalanceMonitor: BalanceMonitor {
         )
     }
 
-    /// Starts the periodic refresh loop. The first fetch happens after one
+    /// Starts the automatic refresh loop. The first fetch happens after one
     /// Polling Interval; launch-time and manual refreshes are separate.
     func startPolling() {
         guard pollingTask == nil else {
             return
         }
         pollingTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else {
-                    return
-                }
-                do {
-                    try await self.clock.sleep(for: .seconds(self.pollingInterval))
-                } catch {
-                    return
-                }
-                if Task.isCancelled {
-                    return
-                }
-                self.refreshStatuses()
-                await self.refresh()
+            await self?.runPollingLoop()
+        }
+    }
+
+    /// Sleeps until the earliest Account is due or the earliest Snapshot
+    /// crosses its Stale threshold, whichever comes first. Each Account's
+    /// backoff deadline is included, so retries happen on time without a busy
+    /// loop.
+    private func runPollingLoop() async {
+        while !Task.isCancelled {
+            let now = now()
+            refreshStatuses(at: now)
+
+            let dueAccounts = accountsDue(at: now)
+            if !dueAccounts.isEmpty {
+                await refreshAccounts(dueAccounts)
+                continue
+            }
+
+            let deadline = nextScheduledDeadline(after: now)
+            let delay = max(deadline.timeIntervalSince(now), 0)
+            do {
+                try await clock.sleep(for: .seconds(delay))
+            } catch {
+                return
             }
         }
+    }
+
+    private func accountsDue(at date: Date) -> [Account] {
+        accounts.filter { account in
+            guard let schedule = schedules[account.id] else {
+                return true
+            }
+            return schedule.nextAutomaticAttemptAt <= date
+        }
+    }
+
+    private func nextScheduledDeadline(after date: Date) -> Date {
+        var deadlines = accounts.compactMap { schedules[$0.id]?.nextAutomaticAttemptAt }
+        for row in rows {
+            guard let snapshot = row.snapshot, snapshot.isAvailable else {
+                continue
+            }
+            let staleAt = snapshot.fetchedAt.addingTimeInterval(3 * pollingInterval)
+            if staleAt > date {
+                deadlines.append(staleAt)
+            }
+        }
+        return deadlines.min() ?? date.addingTimeInterval(pollingInterval)
     }
 
     func stopPolling() {
@@ -151,18 +211,35 @@ final class LiveBalanceMonitor: BalanceMonitor {
         provider = dataSource.provider
         accounts = dataSource.accounts
         rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        let firstAttempt = now().addingTimeInterval(pollingInterval)
+        schedules = Dictionary(
+            uniqueKeysWithValues: accounts.map {
+                ($0.id, AccountSchedule(nextAutomaticAttemptAt: firstAttempt))
+            }
+        )
         await refresh()
     }
 
     /// Refreshes every Account concurrently, bounded by the global fetch cap.
-    /// Results are applied as they arrive, so one slow Account never delays
-    /// the rows of the others.
+    /// Manual refreshes bypass any Account's pending backoff.
     func refresh() async {
-        let accounts = self.accounts
+        await refreshAccounts(accounts)
+    }
+
+    /// Refreshes exactly one Account, sharing the same fetch cap as polling.
+    /// A manual refresh bypasses that Account's pending backoff.
+    func refresh(accountID: Account.ID) async {
+        guard let account = accounts.first(where: { $0.id == accountID }) else {
+            return
+        }
+        await refreshAccounts([account])
+    }
+
+    private func refreshAccounts(_ accountsToRefresh: [Account]) async {
         let provider = self.provider
         let limiter = self.limiter
         await withTaskGroup(of: FetchResult.self) { group in
-            for account in accounts {
+            for account in accountsToRefresh {
                 group.addTask {
                     await Self.fetch(account, using: provider, limiter: limiter)
                 }
@@ -171,15 +248,6 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 apply(result)
             }
         }
-    }
-
-    /// Refreshes exactly one Account, sharing the same fetch cap as polling.
-    func refresh(accountID: Account.ID) async {
-        guard let account = accounts.first(where: { $0.id == accountID }) else {
-            return
-        }
-        let result = await Self.fetch(account, using: provider, limiter: limiter)
-        apply(result)
     }
 
     private nonisolated static func fetch(
@@ -215,11 +283,38 @@ final class LiveBalanceMonitor: BalanceMonitor {
         switch result.outcome {
         case let .snapshot(snapshot):
             apply(snapshot)
+            recordSuccess(for: result.account)
         case let .failure(error):
             apply(error, for: result.account)
+            recordFailure(error, for: result.account)
         case .cancelled:
             break
         }
+    }
+
+    /// A successful refresh clears any backoff and returns the Account to the
+    /// normal Polling Interval.
+    private func recordSuccess(for account: Account) {
+        schedules[account.id] = AccountSchedule(
+            nextAutomaticAttemptAt: now().addingTimeInterval(pollingInterval)
+        )
+    }
+
+    /// Failures back off per Account; a Provider-supplied Retry-After takes
+    /// precedence over the normal 1, 2, 5, 15 minute schedule.
+    private func recordFailure(_ error: BalanceProviderError, for account: Account) {
+        var schedule = schedules[account.id]
+            ?? AccountSchedule(nextAutomaticAttemptAt: now())
+        schedule.consecutiveFailures += 1
+        let delay = error.retryAfter
+            ?? Self.backoffDelay(forFailureCount: schedule.consecutiveFailures)
+        schedule.nextAutomaticAttemptAt = now().addingTimeInterval(delay)
+        schedules[account.id] = schedule
+    }
+
+    private static func backoffDelay(forFailureCount count: Int) -> TimeInterval {
+        let index = min(max(count - 1, 0), backoffDelays.count - 1)
+        return backoffDelays[index]
     }
 
     private func apply(_ snapshot: BalanceSnapshot) {
@@ -247,8 +342,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
     /// Re-derives freshness from Snapshot age, so a row becomes Stale as time
     /// passes even when no fetch succeeds.
-    private func refreshStatuses() {
-        let now = now()
+    private func refreshStatuses(at now: Date) {
         var updated = rows
         var changed = false
         for index in updated.indices {
