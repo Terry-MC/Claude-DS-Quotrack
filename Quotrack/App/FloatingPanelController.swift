@@ -20,7 +20,11 @@ final class FloatingPanelController: PanelPresenting {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = true
-        panel.contentView = NSHostingView(rootView: BalancePanelView(monitor: monitor))
+        let hostingView = NSHostingView(rootView: BalancePanelView(monitor: monitor))
+        hostingView.frame = NSRect(origin: .zero, size: contentSize)
+        hostingView.autoresizingMask = [.width, .height]
+        panel.contentView = hostingView
+        panel.setContentSize(contentSize)
         panel.center()
         self.panel = panel
     }
