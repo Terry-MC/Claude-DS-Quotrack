@@ -1,8 +1,10 @@
 import AppKit
+import Observation
 
 @MainActor
 final class MenuBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
+    private let monitor: LiveBalanceMonitor
     private let panelController: FloatingPanelController
     private let menuPresenter: StatusMenuPresenter
     private let interaction: MenuBarInteractionHandler
@@ -31,6 +33,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         )
 
         self.statusItem = statusItem
+        self.monitor = monitor
         self.panelController = panelController
         self.menu = menu
         self.menuPresenter = menuPresenter
@@ -45,6 +48,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         menuPresenter.statusItem = statusItem
         menu.delegate = self
         updateLaunchAtLoginItemState()
+        observeAggregateState()
     }
 
     /// Reveals the floating panel, used after onboarding completes.
@@ -56,16 +60,37 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         guard let button = statusItem.button else {
             return
         }
-        let image = NSImage(
-            systemSymbolName: "dollarsign.circle.fill",
-            accessibilityDescription: "Quotrack"
-        )
-        image?.isTemplate = true
-        button.image = image
-        button.toolTip = "Quotrack"
         button.target = self
         button.action = #selector(statusItemClicked(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        updateStatusItem(for: monitor.aggregateState)
+    }
+
+    /// Re-registers after every change because Observation tracking fires
+    /// once. Rows mutate on the main actor, so by the time the queued task
+    /// runs the new aggregate is visible and can be applied to the icon.
+    private func observeAggregateState() {
+        withObservationTracking {
+            updateStatusItem(for: monitor.aggregateState)
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.observeAggregateState()
+            }
+        }
+    }
+
+    private func updateStatusItem(for state: AggregateBalanceState) {
+        guard let button = statusItem.button else {
+            return
+        }
+        let viewState = MenuBarStatusPresentation.viewState(for: state)
+        let image = NSImage(
+            systemSymbolName: viewState.symbolName,
+            accessibilityDescription: viewState.accessibilityDescription
+        )
+        image?.isTemplate = true
+        button.image = image
+        button.toolTip = viewState.accessibilityDescription
     }
 
     private func configureMenu() {
