@@ -18,10 +18,10 @@ struct LaunchPresentationTests {
     }
 
     @Test
-    func liveInstallWithStoredAccountsSkipsOnboarding() {
+    func liveInstallWithStoredAccountsSkipsOnboardingAndShowsThePanel() {
         let presentation = LaunchPresentation.make(mode: .live, storedAccountCount: 2)
 
         #expect(presentation.showsOnboarding == false)
-        #expect(presentation.showsPanel == false)
+        #expect(presentation.showsPanel == true)
     }
 }

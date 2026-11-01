@@ -12,7 +12,7 @@ struct LaunchPresentation: Equatable, Sendable {
         case .live:
             return LaunchPresentation(
                 showsOnboarding: storedAccountCount == 0,
-                showsPanel: false
+                showsPanel: storedAccountCount > 0
             )
         }
     }
