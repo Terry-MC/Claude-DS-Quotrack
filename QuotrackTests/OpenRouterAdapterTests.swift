@@ -6,7 +6,7 @@ struct OpenRouterAdapterTests {
     private let account = Account(id: UUID(), provider: .openRouter, label: "管理账户")
 
     @Test
-    func fetchesTheBalanceAsCreditsMinusUsageWithTheManagementKey() async throws {
+    func fetchesTheBalanceAsCreditsMinusSpendWithTheManagementKey() async throws {
         let transport = StubHTTPTransport(
             response: .json(body: OpenRouterFixtures.success)
         )
@@ -33,7 +33,7 @@ struct OpenRouterAdapterTests {
                 kind: .totalCredits,
                 amount: Decimal(string: "100.5")!
             ),
-            BalanceBreakdownItem(kind: .usage, amount: Decimal(string: "25.75")!),
+            BalanceBreakdownItem(kind: .spend, amount: Decimal(string: "25.75")!),
         ])
 
         let request = try #require(transport.requests.first)
@@ -55,22 +55,23 @@ struct OpenRouterAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .permission)
         #expect(error.userMessage(for: .openRouter) == UIStrings.openRouterManagementKeyError)
     }
 
     @Test
-    func anInvalidOrMissingManagementKeyMapsToAuthentication() async throws {
+    func aMissingOrInvalidCredentialMapsToPermissionWithTheManagementKeyMessage() async throws {
         let transport = StubHTTPTransport(
             response: .json(status: 401, body: #"{"error":{"code":401}}"#)
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
-        #expect(error.category == .authentication)
+        #expect(error.category == .permission)
+        #expect(error.userMessage(for: .openRouter) == UIStrings.openRouterManagementKeyError)
     }
 
     @Test
@@ -80,7 +81,7 @@ struct OpenRouterAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == nil)
@@ -97,7 +98,7 @@ struct OpenRouterAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 120)
@@ -114,7 +115,7 @@ struct OpenRouterAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 60)
@@ -133,7 +134,7 @@ struct OpenRouterAdapterTests {
         let transport = StubHTTPTransport(response: .json(body: body))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .malformedResponse)
     }
@@ -143,7 +144,7 @@ struct OpenRouterAdapterTests {
         let transport = StubHTTPTransport(error: URLError(.notConnectedToInternet))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .network)
     }
@@ -155,7 +156,7 @@ struct OpenRouterAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .unknown)
     }
@@ -171,23 +172,10 @@ struct OpenRouterAdapterTests {
             now: { now }
         )
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .authentication)
         #expect(transport.requests.isEmpty)
-    }
-
-    private func providerError(from adapter: OpenRouterAdapter) async throws -> BalanceProviderError {
-        do {
-            _ = try await adapter.fetchBalance(for: account)
-            Issue.record("Expected the fetch to fail, but it succeeded.")
-            return .unknown
-        } catch let error as BalanceProviderError {
-            return error
-        } catch {
-            Issue.record("Expected a typed Provider error, got \(error).")
-            return .unknown
-        }
     }
 
     private func makeAdapter(transport: StubHTTPTransport) -> OpenRouterAdapter {

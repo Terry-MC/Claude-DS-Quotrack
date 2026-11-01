@@ -4,11 +4,7 @@ import Foundation
 /// this seam, so tests can prove success and failure without network access,
 /// and mock mode can walk the same flow with fixtures.
 protocol ConnectionTesting: Sendable {
-    func testConnection(
-        provider: Provider,
-        region: Region?,
-        credential: String
-    ) async throws -> BalanceSnapshot
+    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot
 }
 
 /// The development adapter: it succeeds without a network request or a saved
@@ -27,11 +23,7 @@ struct MockConnectionTester: ConnectionTesting {
         self.amount = amount
     }
 
-    func testConnection(
-        provider: Provider,
-        region: Region?,
-        credential: String
-    ) async throws -> BalanceSnapshot {
+    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot {
         BalanceSnapshot(
             accountID: UUID(),
             balance: Balance(amount: amount, currency: .cny),
@@ -39,13 +31,6 @@ struct MockConnectionTester: ConnectionTesting {
             isAvailable: true
         )
     }
-}
-
-/// A Provider adapter that can query with a credential directly, before that
-/// credential belongs to a saved Account. Real adapters conform to this in
-/// addition to `BalanceProvider`.
-protocol CredentialBalanceAdapter: Sendable {
-    func fetchBalance(region: Region?, credential: String) async throws -> BalanceSnapshot
 }
 
 /// The live test-connection implementation. Provider adapters are registered
@@ -58,15 +43,14 @@ struct ProviderRegistryConnectionTester: ConnectionTesting {
         self.adapters = adapters
     }
 
-    func testConnection(
-        provider: Provider,
-        region: Region?,
-        credential: String
-    ) async throws -> BalanceSnapshot {
-        guard let adapter = adapters[provider] else {
+    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot {
+        guard let adapter = adapters[draft.provider] else {
             throw BalanceProviderError.unknown
         }
-        return try await adapter.fetchBalance(region: region, credential: credential)
+        return try await adapter.fetchBalance(
+            region: draft.region,
+            credential: draft.credential
+        )
     }
 }
 
@@ -79,27 +63,12 @@ extension ProviderRegistryConnectionTester {
         transport: any HTTPTransport = URLSessionTransport(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) -> ProviderRegistryConnectionTester {
-        ProviderRegistryConnectionTester(adapters: [
-            .deepSeek: DeepSeekAdapter(
-                transport: transport,
+        ProviderRegistryConnectionTester(
+            adapters: LiveBalanceAdapters.make(
                 credentialStore: credentialStore,
-                now: now
-            ),
-            .moonshot: MoonshotAdapter(
                 transport: transport,
-                credentialStore: credentialStore,
                 now: now
-            ),
-            .siliconFlow: SiliconFlowAdapter(
-                transport: transport,
-                credentialStore: credentialStore,
-                now: now
-            ),
-            .openRouter: OpenRouterAdapter(
-                transport: transport,
-                credentialStore: credentialStore,
-                now: now
-            ),
-        ])
+            )
+        )
     }
 }

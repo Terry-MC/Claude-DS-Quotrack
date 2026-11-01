@@ -96,8 +96,24 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .authentication)
+    }
+
+    @Test
+    func unauthorizedSuggestsCheckingTheRegionBecauseKeysAreRegionLocked() async throws {
+        let transport = StubHTTPTransport(
+            response: .json(
+                status: 401,
+                body: #"{"code":30014,"message":"Token is invalid."}"#
+            )
+        )
+        let adapter = makeAdapter(transport: transport)
+
+        let error = await providerError(from: adapter, account: account)
+
+        #expect(error.category == .authentication)
+        #expect(error.userMessage(for: .siliconFlow).contains("区域"))
     }
 
     @Test
@@ -110,7 +126,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .permission)
     }
 
@@ -124,7 +140,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == nil)
     }
@@ -140,7 +156,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 120)
     }
@@ -156,7 +172,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 60)
     }
@@ -168,7 +184,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .malformedResponse)
     }
 
@@ -185,7 +201,7 @@ struct SiliconFlowAdapterTests {
         let transport = StubHTTPTransport(response: .json(body: body))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .malformedResponse)
     }
 
@@ -194,7 +210,7 @@ struct SiliconFlowAdapterTests {
         let transport = StubHTTPTransport(error: URLError(.notConnectedToInternet))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .network)
     }
 
@@ -208,7 +224,7 @@ struct SiliconFlowAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .unknown)
     }
 
@@ -223,7 +239,7 @@ struct SiliconFlowAdapterTests {
             now: { now }
         )
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
         #expect(error.category == .authentication)
         #expect(transport.requests.isEmpty)
     }
@@ -272,19 +288,6 @@ struct SiliconFlowAdapterTests {
         #expect(snapshot.breakdown?.first?.amount == Decimal(string: "1.25")!)
         #expect(transport.requests.first?.url == SiliconFlowAdapter.internationalEndpoint)
         #expect(transport.requests.first?.headers["Authorization"] == "Bearer sk-entered")
-    }
-
-    private func providerError(from adapter: SiliconFlowAdapter) async throws -> BalanceProviderError {
-        do {
-            _ = try await adapter.fetchBalance(for: account)
-            Issue.record("Expected the fetch to fail, but it succeeded.")
-            return .unknown
-        } catch let error as BalanceProviderError {
-            return error
-        } catch {
-            Issue.record("Expected a typed Provider error, got \(error).")
-            return .unknown
-        }
     }
 
     private func makeAdapter(transport: StubHTTPTransport) -> SiliconFlowAdapter {

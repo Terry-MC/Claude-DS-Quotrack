@@ -12,7 +12,7 @@ import Foundation
 /// scode, status }` with amounts encoded as JSON numbers. The response carries
 /// no currency field: the domestic deployment reports CNY and the
 /// international deployment reports USD.
-struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
+struct MoonshotAdapter: CredentialBalanceAdapter {
     static let domesticEndpoint = URL(
         string: "https://api.moonshot.cn/v1/users/me/balance"
     )!
@@ -20,8 +20,7 @@ struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
         string: "https://api.moonshot.ai/v1/users/me/balance"
     )!
 
-    private let transport: any HTTPTransport
-    private let credentialStore: any CredentialStore
+    private let http: AuthenticatedHTTPClient
     private let now: @Sendable () -> Date
 
     init(
@@ -29,15 +28,18 @@ struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
         credentialStore: any CredentialStore,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
-        self.transport = transport
-        self.credentialStore = credentialStore
+        self.http = AuthenticatedHTTPClient(
+            transport: transport,
+            credentialStore: credentialStore,
+            now: now
+        )
         self.now = now
     }
 
     func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
-        let credential = try credential(for: account.id)
-        let response = try await send(
-            request(credential: credential, region: account.region)
+        let response = try await http.get(
+            Self.endpoint(for: account.region),
+            accountID: account.id
         )
         return try snapshot(
             from: response,
@@ -49,8 +51,9 @@ struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
     /// The onboarding path: the credential has not been saved to an Account
     /// yet, so the tester supplies it directly.
     func fetchBalance(region: Region?, credential: String) async throws -> BalanceSnapshot {
-        let response = try await send(
-            request(credential: credential, region: region)
+        let response = try await http.get(
+            Self.endpoint(for: region),
+            credential: credential
         )
         return try snapshot(
             from: response,
@@ -77,52 +80,11 @@ struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
         }
     }
 
-    private func send(_ request: HTTPRequest) async throws -> HTTPResponse {
-        do {
-            return try await transport.send(request)
-        } catch let error as BalanceProviderError {
-            throw error
-        } catch {
-            // URLError and other transport failures become the shared network
-            // category so the monitor never sees a raw Foundation error.
-            throw BalanceProviderError.classify(error)
-        }
-    }
-
-    private func credential(for accountID: Account.ID) throws -> String {
-        do {
-            guard
-                let stored = try credentialStore.credential(for: accountID),
-                !stored.isEmpty
-            else {
-                throw BalanceProviderError.authentication
-            }
-            return stored
-        } catch let error as BalanceProviderError {
-            throw error
-        } catch {
-            throw BalanceProviderError.classify(error)
-        }
-    }
-
-    private func request(credential: String, region: Region?) -> HTTPRequest {
-        HTTPRequest(
-            url: Self.endpoint(for: region),
-            headers: [
-                "Authorization": "Bearer \(credential)",
-                "Accept": "application/json",
-            ]
-        )
-    }
-
     private func snapshot(
         from response: HTTPResponse,
         accountID: Account.ID,
         region: Region?
     ) throws -> BalanceSnapshot {
-        guard (200..<300).contains(response.statusCode) else {
-            throw error(for: response)
-        }
         do {
             let decoded = try JSONDecoder().decode(BalanceResponse.self, from: response.body)
             return BalanceSnapshot(
@@ -145,49 +107,6 @@ struct MoonshotAdapter: BalanceProvider, CredentialBalanceAdapter {
         }
     }
 
-    /// Moonshot credentials are Region-locked, so a 401 commonly means the
-    /// credential was sent to the wrong deployment. It stays an authentication
-    /// error; the Region hint lives in the user-facing message.
-    private func error(for response: HTTPResponse) -> BalanceProviderError {
-        switch response.statusCode {
-        case 401: .authentication
-        case 403: .permission
-        case 429: .rateLimit(retryAfter: Self.retryAfter(from: response, now: now()))
-        default: .unknown
-        }
-    }
-
-    /// `Retry-After` is optional: when it is absent or unparseable the monitor
-    /// falls back to its normal backoff.
-    private static func retryAfter(
-        from response: HTTPResponse,
-        now: Date
-    ) -> TimeInterval? {
-        guard
-            let raw = response.header("Retry-After")?
-                .trimmingCharacters(in: .whitespacesAndNewlines),
-            !raw.isEmpty
-        else {
-            return nil
-        }
-        if let seconds = TimeInterval(raw) {
-            return seconds >= 0 ? seconds : nil
-        }
-        if let date = httpDate(raw) {
-            return max(0, date.timeIntervalSince(now))
-        }
-        return nil
-    }
-
-    /// HTTP-date form of `Retry-After`, for Providers that send it instead of
-    /// a number of seconds. RFC 1123 is the preferred HTTP-date format.
-    private static func httpDate(_ string: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
-        return formatter.date(from: string)
-    }
 }
 
 /// The Moonshot response. The three balances are nested under `data` and are

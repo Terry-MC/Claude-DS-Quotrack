@@ -93,7 +93,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .authentication)
         #expect(error.userMessage(for: .moonshot).contains("区域"))
@@ -106,7 +106,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .permission)
     }
@@ -118,7 +118,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == nil)
@@ -135,7 +135,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 120)
@@ -150,7 +150,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .malformedResponse)
     }
@@ -169,7 +169,7 @@ struct MoonshotAdapterTests {
         let transport = StubHTTPTransport(response: .json(body: body))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .malformedResponse)
     }
@@ -181,7 +181,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .unknown)
     }
@@ -191,7 +191,7 @@ struct MoonshotAdapterTests {
         let transport = StubHTTPTransport(error: URLError(.notConnectedToInternet))
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .network)
     }
@@ -207,7 +207,7 @@ struct MoonshotAdapterTests {
             now: { now }
         )
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .authentication)
         #expect(transport.requests.isEmpty)
@@ -224,7 +224,7 @@ struct MoonshotAdapterTests {
         )
         let adapter = makeAdapter(transport: transport)
 
-        let error = try await providerError(from: adapter)
+        let error = await providerError(from: adapter, account: account)
 
         #expect(error.category == .rateLimit)
         #expect(error.retryAfter == 60)
@@ -322,21 +322,6 @@ struct MoonshotAdapterTests {
                 BalanceBreakdownItem(kind: .cash, amount: Decimal(string: "-3.41")!),
             ]
         )
-    }
-
-    private func providerError(
-        from adapter: MoonshotAdapter
-    ) async throws -> BalanceProviderError {
-        do {
-            _ = try await adapter.fetchBalance(for: account)
-            Issue.record("Expected the fetch to fail, but it succeeded.")
-            return .unknown
-        } catch let error as BalanceProviderError {
-            return error
-        } catch {
-            Issue.record("Expected a typed Provider error, got \(error).")
-            return .unknown
-        }
     }
 
     private func makeAdapter(transport: StubHTTPTransport) -> MoonshotAdapter {
