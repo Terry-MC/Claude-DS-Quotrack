@@ -27,8 +27,8 @@ enum SnapshotStatus: String, Sendable, Equatable {
 /// One named component of a Balance, such as granted versus topped-up credit.
 /// Providers report different components, so the kind is the shared vocabulary
 /// and the amount always uses the Snapshot's currency.
-struct BalanceBreakdownItem: Equatable, Sendable, Identifiable {
-    enum Kind: String, Sendable, Equatable, CaseIterable {
+struct BalanceBreakdownItem: Codable, Equatable, Sendable, Identifiable {
+    enum Kind: String, Codable, Sendable, Equatable, CaseIterable {
         case granted
         case toppedUp
         case voucher
