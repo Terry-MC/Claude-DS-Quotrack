@@ -16,3 +16,6 @@ Quotrack.xcodeproj/
 
 # macOS
 .DS_Store
+
+# Agent worktrees
+.claude/worktrees/
