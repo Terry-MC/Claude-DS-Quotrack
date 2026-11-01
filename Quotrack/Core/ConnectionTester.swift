@@ -85,6 +85,11 @@ extension ProviderRegistryConnectionTester {
                 credentialStore: credentialStore,
                 now: now
             ),
+            .moonshot: MoonshotAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            ),
         ])
     }
 }
