@@ -6,7 +6,7 @@ final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
 
     init(monitor: any BalanceMonitor) {
-        let contentSize = NSSize(width: 320, height: 240)
+        let contentSize = NSSize(width: 360, height: 420)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .nonactivatingPanel],

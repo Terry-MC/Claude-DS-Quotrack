@@ -77,6 +77,21 @@ struct BalanceMonitorTests {
     }
 
     @Test
+    func refreshShowsTypedFailureOnTheAccountRow() async throws {
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let monitor = LiveBalanceMonitor(
+            provider: FailingBalanceProvider(error: .authentication),
+            accounts: [account]
+        )
+
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first)
+        #expect(row.status == .error)
+        #expect(row.error == .authentication)
+    }
+
+    @Test
     func rowChangesNotifyObserversThroughTheMonitorSeam() async throws {
         let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
         let snapshot = BalanceSnapshot(
@@ -110,5 +125,13 @@ private final class FakeBalanceProvider: BalanceProvider, @unchecked Sendable {
 
     func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
         snapshot
+    }
+}
+
+private struct FailingBalanceProvider: BalanceProvider {
+    let error: BalanceProviderError
+
+    func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
+        throw error
     }
 }

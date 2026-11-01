@@ -49,6 +49,7 @@ enum BalanceRowPresentation {
         case .fresh: "正常"
         case .stale: "已过期"
         case .unavailable: "不可用"
+        case .error: "错误"
         }
     }
 }
