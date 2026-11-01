@@ -10,6 +10,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindowController: SettingsWindowController?
     private var onboardingWindowController: OnboardingWindowController?
     private var dataSourceMode = DataSourceMode.live
+    /// One Keychain store and one HTTP transport are shared by Account CRUD,
+    /// the live Provider registry, and the onboarding connection tester, so all
+    /// three paths read and send credentials the same way.
+    private var credentialStore: (any CredentialStore)?
+    private var transport: (any HTTPTransport)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -19,9 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .dataSourceMode
         let store = FileSnapshotStore.applicationSupport()
         self.store = store
+        let credentialStore = KeychainCredentialStore()
+        self.credentialStore = credentialStore
+        let transport = URLSessionTransport()
+        self.transport = transport
         let accountManager = AccountManager(
             store: store,
-            credentialStore: KeychainCredentialStore()
+            credentialStore: credentialStore
         )
         self.accountManager = accountManager
         let settingsModel = SettingsModel(
@@ -31,7 +40,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.settingsModel = settingsModel
 
         let monitor = LiveBalanceMonitor(
-            dataSource: BalanceDataSource.make(mode: dataSourceMode, store: store),
+            dataSource: BalanceDataSource.make(
+                mode: dataSourceMode,
+                store: store,
+                credentialStore: credentialStore,
+                transport: transport
+            ),
             store: dataSourceMode == .live ? store : nil,
             pollingInterval: settingsModel.pollingInterval,
             sleepWakeObserver: NSWorkspaceSleepWakeObserver()
@@ -111,19 +125,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func makeConnectionTester() -> any ConnectionTesting {
         switch dataSourceMode {
         case .mock:
-            MockConnectionTester()
+            return MockConnectionTester()
         case .live:
-            ProviderRegistryConnectionTester(adapters: [:])
+            guard let credentialStore, let transport else {
+                // Only reachable before launch wiring completes; fail honestly
+                // instead of fabricating a successful connection.
+                return ProviderRegistryConnectionTester(adapters: [:])
+            }
+            return ProviderRegistryConnectionTester.live(
+                credentialStore: credentialStore,
+                transport: transport
+            )
         }
     }
 
     /// Account CRUD changes the Account list, so the monitor re-reads its data
     /// source and refreshes rather than waiting for a relaunch.
     private func reloadMonitorAccounts() {
-        guard let monitor, let store else {
+        guard let monitor, let store, let credentialStore, let transport else {
             return
         }
-        let dataSource = BalanceDataSource.make(mode: dataSourceMode, store: store)
+        let dataSource = BalanceDataSource.make(
+            mode: dataSourceMode,
+            store: store,
+            credentialStore: credentialStore,
+            transport: transport
+        )
         let persistence = dataSourceMode == .live ? store : nil
         Task {
             await monitor.switchDataSource(dataSource, store: persistence)
