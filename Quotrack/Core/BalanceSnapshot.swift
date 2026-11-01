@@ -21,6 +21,7 @@ enum SnapshotStatus: String, Sendable, Equatable {
     case fresh
     case stale
     case unavailable
+    case error
 }
 
 /// The result of one balance query for one Account at one point in time.

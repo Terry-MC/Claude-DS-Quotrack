@@ -7,6 +7,7 @@ final class MenuBarController: NSObject {
     private let menuPresenter: StatusMenuPresenter
     private let interaction: MenuBarInteractionHandler
     private let menu: NSMenu
+    var onSwitchDataSource: (() -> Void)?
 
     init(monitor: any BalanceMonitor) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -58,6 +59,15 @@ final class MenuBarController: NSObject {
         )
         launchAtLoginItem.isEnabled = false
 
+        #if DEBUG
+        let switchDataSourceItem = menu.addItem(
+            withTitle: "切换数据源（模拟/真实）",
+            action: #selector(switchDataSource),
+            keyEquivalent: ""
+        )
+        switchDataSourceItem.target = self
+        #endif
+
         menu.addItem(.separator())
 
         let quitItem = menu.addItem(
@@ -73,6 +83,10 @@ final class MenuBarController: NSObject {
         let isRightClick = event?.type == .rightMouseUp
             || (event?.modifierFlags.contains(.control) ?? false)
         interaction.handle(isRightClick ? .right : .left)
+    }
+
+    @objc private func switchDataSource() {
+        onSwitchDataSource?()
     }
 
     @objc private func quit() {

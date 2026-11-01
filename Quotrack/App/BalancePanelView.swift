@@ -7,17 +7,34 @@ struct BalancePanelView: View {
     let monitor: any BalanceMonitor
 
     var body: some View {
+        let header = PanelHeaderPresentation.viewState(for: monitor.rows)
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(monitor.rows) { row in
-                BalanceRowView(
-                    viewState: BalanceRowPresentation.viewState(for: row, now: Date())
-                )
-                Divider()
+            HStack(spacing: 12) {
+                Text(header.healthyText)
+                    .foregroundStyle(.green)
+                Text(header.errorText)
+                    .foregroundStyle(.red)
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(monitor.rows) { row in
+                        BalanceRowView(
+                            viewState: BalanceRowPresentation.viewState(for: row, now: Date())
+                        )
+                        Divider()
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 4)
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
@@ -67,6 +84,7 @@ private struct BalanceRowView: View {
         case .some(.fresh): .green
         case .some(.stale): .gray
         case .some(.unavailable): .orange
+        case .some(.error): .red
         case .none: .secondary
         }
     }

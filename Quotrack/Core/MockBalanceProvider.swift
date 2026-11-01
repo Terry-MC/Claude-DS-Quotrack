@@ -7,17 +7,43 @@ struct MockBalanceProvider: BalanceProvider {
     static let amount = Decimal(string: "42.50")!
     static let currency = Currency.cny
 
-    private let fetchedAt: Date
+    private let fixedFetchedAt: Date?
+    private let outcomes: [Account.ID: MockOutcome]
 
     init(fetchedAt: Date = Date()) {
-        self.fetchedAt = fetchedAt
+        self.fixedFetchedAt = fetchedAt
+        self.outcomes = [:]
+    }
+
+    init(fixtures: [MockFixture]) {
+        self.fixedFetchedAt = nil
+        self.outcomes = Dictionary(
+            uniqueKeysWithValues: fixtures.map { ($0.account.id, $0.outcome) }
+        )
     }
 
     func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
-        BalanceSnapshot(
+        if let outcome = outcomes[account.id] {
+            switch outcome {
+            case let .balance(balance, fetchedAt):
+                return BalanceSnapshot(
+                    accountID: account.id,
+                    balance: balance,
+                    fetchedAt: fetchedAt,
+                    isAvailable: true
+                )
+            case let .failure(error):
+                throw error
+            }
+        }
+
+        guard let fixedFetchedAt else {
+            throw BalanceProviderError.unknown
+        }
+        return BalanceSnapshot(
             accountID: account.id,
             balance: Balance(amount: Self.amount, currency: Self.currency),
-            fetchedAt: fetchedAt,
+            fetchedAt: fixedFetchedAt,
             isAvailable: true
         )
     }
