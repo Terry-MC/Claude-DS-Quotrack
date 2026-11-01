@@ -1,10 +1,11 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
 
-    init() {
+    init(monitor: any BalanceMonitor) {
         let contentSize = NSSize(width: 320, height: 240)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),
@@ -19,7 +20,7 @@ final class FloatingPanelController: PanelPresenting {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = true
-        panel.contentView = NSView(frame: NSRect(origin: .zero, size: contentSize))
+        panel.contentView = NSHostingView(rootView: BalancePanelView(monitor: monitor))
         panel.center()
         self.panel = panel
     }

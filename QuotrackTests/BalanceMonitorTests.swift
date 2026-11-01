@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 
 @MainActor
@@ -53,6 +54,50 @@ struct BalanceMonitorTests {
         let row = try #require(monitor.rows.first)
         #expect(row.snapshot == secondSnapshot)
         #expect(row.status == .fresh)
+    }
+
+    @Test
+    func mockBalanceAppearsAsOnePanelRow() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let monitor = LiveBalanceMonitor(
+            provider: MockBalanceProvider(fetchedAt: now.addingTimeInterval(-120)),
+            accounts: [account]
+        )
+
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first)
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+        #expect(viewState.providerName == "DeepSeek")
+        #expect(viewState.label == "个人账户")
+        #expect(viewState.balanceText == "¥42.50")
+        #expect(viewState.updatedText == "2分钟前")
+        #expect(viewState.statusText == "正常")
+    }
+
+    @Test
+    func rowChangesNotifyObserversThroughTheMonitorSeam() async throws {
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        let monitor: any BalanceMonitor = LiveBalanceMonitor(
+            provider: FakeBalanceProvider(snapshot: snapshot),
+            accounts: [account]
+        )
+
+        await confirmation("row update observed") { confirm in
+            withObservationTracking {
+                _ = monitor.rows
+            } onChange: {
+                confirm()
+            }
+            await monitor.refresh()
+        }
     }
 }
 
