@@ -60,7 +60,34 @@ final class AccountManager {
             id: current.id,
             provider: current.provider,
             region: current.region,
-            label: trimmedLabel
+            label: trimmedLabel,
+            lowBalanceThreshold: current.lowBalanceThreshold
+        )
+        var updatedAccounts = accounts
+        updatedAccounts[index] = updated
+        try store.saveAccounts(updatedAccounts)
+        accounts = updatedAccounts
+    }
+
+    /// Enables or clears the Account's low-Balance warning. A threshold must
+    /// be greater than zero; `nil` turns the warning off.
+    func updateLowBalanceThreshold(
+        accountID: Account.ID,
+        threshold: Decimal?
+    ) throws {
+        guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
+            throw AccountManagerError.accountNotFound
+        }
+        if let threshold, threshold <= 0 {
+            throw AccountManagerError.invalidThreshold
+        }
+        let current = accounts[index]
+        let updated = Account(
+            id: current.id,
+            provider: current.provider,
+            region: current.region,
+            label: current.label,
+            lowBalanceThreshold: threshold
         )
         var updatedAccounts = accounts
         updatedAccounts[index] = updated
@@ -104,12 +131,14 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
     case accountNotFound
     case missingLabel
     case missingCredential
+    case invalidThreshold
 
     var errorDescription: String? {
         switch self {
         case .accountNotFound: "账户不存在。"
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
+        case .invalidThreshold: "低余额阈值必须大于 0。"
         }
     }
 }
