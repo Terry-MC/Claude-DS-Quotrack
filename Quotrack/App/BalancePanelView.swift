@@ -7,12 +7,33 @@ import SwiftUI
 @MainActor
 struct BalancePanelView: View {
     let monitor: LiveBalanceMonitor
+    var onAddAccount: () -> Void = {}
     @State private var expansion = BalanceRowExpansion()
 
     var body: some View {
         let rows = monitor.rows
+        if rows.isEmpty {
+            emptyState
+        } else {
+            panel(rows: rows)
+        }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(UIStrings.emptyAccountsTitle, systemImage: "person.crop.circle.badge.plus")
+        } description: {
+            Text(UIStrings.emptyAccountsDescription)
+        } actions: {
+            Button(UIStrings.addAccount, action: onAddAccount)
+                .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func panel(rows: [BalanceRow]) -> some View {
         let header = PanelHeaderPresentation.viewState(for: rows)
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 Text(header.healthyText)
                     .foregroundStyle(.green)

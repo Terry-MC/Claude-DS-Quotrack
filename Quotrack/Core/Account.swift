@@ -9,11 +9,21 @@ struct Account: Codable, Identifiable, Equatable, Sendable {
     /// Only meaningful for Providers that have Regions; nil otherwise.
     let region: Region?
     let label: String
+    /// The Balance below which the row warns visually. `nil` means the
+    /// low-Balance warning is off, which is the default for a new Account.
+    let lowBalanceThreshold: Decimal?
 
-    init(id: UUID, provider: Provider, region: Region? = nil, label: String) {
+    init(
+        id: UUID,
+        provider: Provider,
+        region: Region? = nil,
+        label: String,
+        lowBalanceThreshold: Decimal? = nil
+    ) {
         self.id = id
         self.provider = provider
         self.region = region
         self.label = label
+        self.lowBalanceThreshold = lowBalanceThreshold
     }
 }

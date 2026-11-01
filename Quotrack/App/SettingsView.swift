@@ -1,58 +1,39 @@
 import SwiftUI
 
-/// The minimal Settings surface for ticket #8: an Account list with add, edit,
-/// and delete. The full Settings surface and onboarding are ticket #9.
+/// The full Settings surface: the Account list, the app-wide Polling
+/// Interval, the Launch at Login toggle, and why unsupported Providers are
+/// absent. Account editing includes the per-Account low-Balance threshold,
+/// which defaults to off.
 @MainActor
 struct SettingsView: View {
     let manager: AccountManager
+    let settings: SettingsModel
+    var onAccountsChanged: () -> Void = {}
 
     @State private var sheet: AccountSheet?
     @State private var accountPendingDeletion: Account?
     @State private var errorMessage: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if manager.accounts.isEmpty {
-                ContentUnavailableView(
-                    "尚未添加账户",
-                    systemImage: "person.crop.circle.badge.plus",
-                    description: Text("添加一个账户以开始监控余额。")
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                List {
-                    ForEach(manager.accounts) { account in
-                        AccountRow(
-                            account: account,
-                            onEdit: { sheet = .edit(account) },
-                            onDelete: {
-                                errorMessage = nil
-                                accountPendingDeletion = account
-                            }
-                        )
-                    }
-                }
-                .listStyle(.inset)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                accountsSection
+                Divider()
+                pollingSection
+                Divider()
+                launchAtLoginSection
+                Divider()
+                unsupportedProvidersSection
             }
-
-            Divider()
-
-            HStack(spacing: 12) {
-                Button("添加账户…") {
-                    errorMessage = nil
-                    sheet = .add
-                }
-                Spacer(minLength: 0)
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(1)
-                }
-            }
-            .padding(12)
+            .padding(20)
         }
-        .frame(minWidth: 460, minHeight: 320)
+        .frame(minWidth: 520, minHeight: 520)
+        .onAppear {
+            settings.refreshLoginItemStatus()
+        }
+        .onChange(of: manager.accounts) {
+            onAccountsChanged()
+        }
         .sheet(item: $sheet) { sheet in
             AccountFormView(mode: sheet.mode, manager: manager)
         }
@@ -73,6 +54,128 @@ struct SettingsView: View {
         } message: {
             Text("该账户的钥匙串凭证和已保存的余额快照都会被移除。")
         }
+    }
+
+    private var accountsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle(UIStrings.settingsAccountsTitle)
+
+            if manager.accounts.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(UIStrings.emptyAccountsTitle)
+                        .font(.headline)
+                    Text(UIStrings.emptyAccountsDescription)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(manager.accounts) { account in
+                        AccountRow(
+                            account: account,
+                            onEdit: { sheet = .edit(account) },
+                            onDelete: {
+                                errorMessage = nil
+                                accountPendingDeletion = account
+                            }
+                        )
+                        if account.id != manager.accounts.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+            }
+
+            HStack(spacing: 12) {
+                Button(UIStrings.addAccount) {
+                    errorMessage = nil
+                    sheet = .add
+                }
+                Spacer(minLength: 0)
+                if let errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
+                }
+            }
+        }
+    }
+
+    private var pollingSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle(UIStrings.settingsPollingTitle)
+            Stepper(
+                value: Binding(
+                    get: { settings.pollingIntervalMinutes },
+                    set: { settings.setPollingInterval(minutes: $0) }
+                ),
+                in: AppSettings.pollingIntervalRange
+            ) {
+                Text("\(UIStrings.pollingIntervalLabel)：\(settings.pollingIntervalMinutes) \(UIStrings.minutesUnit)")
+            }
+            Text(UIStrings.pollingIntervalHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let settingsErrorMessage = settings.settingsErrorMessage {
+                Text(settingsErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var launchAtLoginSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle(UIStrings.settingsLaunchAtLoginTitle)
+            Toggle(
+                UIStrings.launchAtLoginLabel,
+                isOn: Binding(
+                    get: { settings.isLaunchAtLoginEnabled },
+                    set: { settings.setLaunchAtLogin($0) }
+                )
+            )
+            Text(UIStrings.launchAtLoginHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if settings.requiresApproval {
+                HStack(spacing: 8) {
+                    Text(UIStrings.launchAtLoginRequiresApproval)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(UIStrings.openLoginItemsSettings) {
+                        settings.openLoginItemsSettings()
+                    }
+                    .controlSize(.small)
+                }
+            }
+            if let loginItemErrorMessage = settings.loginItemErrorMessage {
+                Text(loginItemErrorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var unsupportedProvidersSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionTitle(UIStrings.settingsUnsupportedTitle)
+            Text(UIStrings.unsupportedProvidersExplanation)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.headline)
     }
 
     private func deletePendingAccount() {
@@ -128,13 +231,17 @@ private struct AccountRow: View {
             Button("编辑", action: onEdit)
             Button("删除", role: .destructive, action: onDelete)
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 
     private var detailText: String {
+        var parts = [account.provider.displayName]
         if let region = account.region {
-            return "\(account.provider.displayName) · \(region.displayName)"
+            parts.append(region.displayName)
         }
-        return account.provider.displayName
+        if let threshold = account.lowBalanceThreshold {
+            parts.append("\(UIStrings.lowBalanceThresholdSaved) \(threshold.description)")
+        }
+        return parts.joined(separator: " · ")
     }
 }

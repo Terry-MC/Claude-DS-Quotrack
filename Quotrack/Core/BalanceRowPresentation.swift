@@ -102,22 +102,7 @@ enum BalanceRowPresentation {
         for error: BalanceProviderError,
         provider: Provider
     ) -> String {
-        switch error.category {
-        case .authentication:
-            UIStrings.authenticationError
-        case .permission:
-            provider == .openRouter
-                ? UIStrings.openRouterManagementKeyError
-                : UIStrings.permissionError
-        case .network:
-            UIStrings.networkError
-        case .rateLimit:
-            UIStrings.rateLimitError
-        case .malformedResponse:
-            UIStrings.malformedResponseError
-        case .unknown:
-            UIStrings.unknownError
-        }
+        error.userMessage(for: provider)
     }
 
     private static func breakdownLabel(for kind: BalanceBreakdownItem.Kind) -> String {

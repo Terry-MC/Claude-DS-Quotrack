@@ -5,7 +5,10 @@ import SwiftUI
 final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
 
-    init(monitor: LiveBalanceMonitor) {
+    init(
+        monitor: LiveBalanceMonitor,
+        onAddAccount: @escaping () -> Void = {}
+    ) {
         let contentSize = NSSize(width: 360, height: 420)
         let panel = NSPanel(
             contentRect: NSRect(origin: .zero, size: contentSize),
@@ -20,7 +23,9 @@ final class FloatingPanelController: PanelPresenting {
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = true
-        let hostingView = NSHostingView(rootView: BalancePanelView(monitor: monitor))
+        let hostingView = NSHostingView(
+            rootView: BalancePanelView(monitor: monitor, onAddAccount: onAddAccount)
+        )
         hostingView.frame = NSRect(origin: .zero, size: contentSize)
         hostingView.autoresizingMask = [.width, .height]
         panel.contentView = hostingView
