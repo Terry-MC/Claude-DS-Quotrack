@@ -57,6 +57,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private var configuredPollingInterval: TimeInterval
     private let clock: any PollingClock
     private let now: @Sendable () -> Date
+    private var store: (any SnapshotStore)?
     @ObservationIgnored private let limiter = FetchLimiter(
         capacity: LiveBalanceMonitor.maxConcurrentFetches
     )
@@ -80,6 +81,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     init(
         provider: any BalanceProvider,
         accounts: [Account],
+        store: (any SnapshotStore)? = nil,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
         now: (@Sendable () -> Date)? = nil
@@ -89,11 +91,14 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.configuredPollingInterval = pollingInterval
         self.clock = clock
         self.now = now ?? { clock.now }
-        self.rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.store = store
+        self.rows = []
+        self.rows = initialRows(for: accounts, store: store)
     }
 
     convenience init(
         dataSource: BalanceDataSource,
+        store: (any SnapshotStore)? = nil,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
         clock: any PollingClock = SystemPollingClock(),
         now: (@Sendable () -> Date)? = nil
@@ -101,6 +106,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.init(
             provider: dataSource.provider,
             accounts: dataSource.accounts,
+            store: store,
             pollingInterval: pollingInterval,
             clock: clock,
             now: now
@@ -144,13 +150,37 @@ final class LiveBalanceMonitor: BalanceMonitor {
         startPolling()
     }
 
-    /// Swaps only the Accounts and Provider adapter. The monitor, its polling
-    /// behavior, and the UI stay exactly the same.
-    func switchDataSource(_ dataSource: BalanceDataSource) async {
+    /// Swaps only the Accounts, Provider adapter, and persistence. The
+    /// monitor, its polling behavior, and the UI stay exactly the same. Mock
+    /// mode passes `store: nil` so it never writes to the real store.
+    func switchDataSource(
+        _ dataSource: BalanceDataSource,
+        store: (any SnapshotStore)? = nil
+    ) async {
         provider = dataSource.provider
         accounts = dataSource.accounts
-        rows = accounts.map { BalanceRow(account: $0, snapshot: nil, status: nil) }
+        self.store = store
+        rows = initialRows(for: dataSource.accounts, store: store)
         await refresh()
+    }
+
+    /// Persisted Snapshots are shown before the first refresh so a launch is
+    /// never blank. Freshness is computed against the configured Polling
+    /// Interval, so old Snapshots come back marked Stale.
+    private func initialRows(
+        for accounts: [Account],
+        store: (any SnapshotStore)?
+    ) -> [BalanceRow] {
+        let persisted = store?.loadSnapshots() ?? [:]
+        return accounts.map { account in
+            let snapshot = persisted[account.id]
+            let matching = snapshot?.accountID == account.id ? snapshot : nil
+            return BalanceRow(
+                account: account,
+                snapshot: matching,
+                status: matching.map { status(for: $0) }
+            )
+        }
     }
 
     /// Refreshes every Account concurrently, bounded by the global fetch cap.
@@ -230,6 +260,9 @@ final class LiveBalanceMonitor: BalanceMonitor {
             snapshot: snapshot,
             status: status(for: snapshot)
         )
+        // Persistence is best-effort: a disk problem must never turn a
+        // successful Balance query into an error for the Account.
+        try? store?.saveSnapshot(snapshot)
     }
 
     private func status(for snapshot: BalanceSnapshot) -> SnapshotStatus {
