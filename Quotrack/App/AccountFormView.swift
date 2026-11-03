@@ -60,7 +60,7 @@ struct AccountFormView: View {
             Form {
                 if case .add = mode {
                     Picker("厂商", selection: $provider) {
-                        ForEach(Provider.allCases, id: \.self) { provider in
+                        ForEach(Provider.addableCases, id: \.self) { provider in
                             Text(provider.displayName).tag(provider)
                         }
                     }

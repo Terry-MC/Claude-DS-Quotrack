@@ -127,9 +127,9 @@ struct AccountManagerTests {
         )
 
         let account = try manager.addAccount(
-            provider: .siliconFlow,
-            label: "SiliconFlow",
-            credential: "sk-siliconflow"
+            provider: .moonshot,
+            label: "Kimi 国内",
+            credential: "sk-moonshot"
         )
 
         #expect(account.region == .domestic)
@@ -334,7 +334,7 @@ struct AccountManagerTests {
             credentialStore: credentials
         )
         let account = try firstLaunch.addAccount(
-            provider: .siliconFlow,
+            provider: .moonshot,
             region: .international,
             label: "公司账户",
             credential: "sk-persisted"

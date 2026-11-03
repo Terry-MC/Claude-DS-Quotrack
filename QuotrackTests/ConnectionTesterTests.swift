@@ -3,10 +3,11 @@ import Testing
 
 struct ConnectionTesterTests {
     @Test
-    func mockConnectionTestingSucceedsForEverySupportedProvider() async throws {
+    func mockConnectionTestingSucceedsForEveryAddableProvider() async throws {
         let tester = MockConnectionTester(now: { Date(timeIntervalSince1970: 1_800_000_000) })
 
-        for provider in Provider.allCases {
+        #expect(!Provider.addableCases.contains(.siliconFlow))
+        for provider in Provider.addableCases {
             let snapshot = try await tester.testConnection(
                 AccountDraft(
                     provider: provider,

@@ -255,9 +255,9 @@ struct AccountThresholdTests {
         let store = InMemorySnapshotStore()
         let manager = makeManager(store: store)
         let account = try manager.addAccount(
-            provider: .siliconFlow,
-            label: "SiliconFlow",
-            credential: "sk-siliconflow"
+            provider: .moonshot,
+            label: "Kimi",
+            credential: "sk-moonshot"
         )
         try manager.updateLowBalanceThreshold(
             accountID: account.id,

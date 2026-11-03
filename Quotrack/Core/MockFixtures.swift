@@ -12,8 +12,9 @@ enum MockOutcome: Equatable, Sendable {
 }
 
 /// The deterministic fixture set shared by mock mode and its tests. It covers
-/// every supported Provider, several Accounts per Provider, a low Balance, all
-/// typed error categories, and a Stale Snapshot.
+/// every addable Provider, several Accounts per Provider, a low Balance, all
+/// typed error categories, a Stale Snapshot, and a legacy SiliconFlow Account
+/// that must render as unsupported.
 enum MockFixtures {
     static func standard(now: Date) -> [MockFixture] {
         [
@@ -81,8 +82,8 @@ enum MockFixtures {
                 error: .rateLimit(retryAfter: 120)
             ),
             failure(provider: .moonshot, label: "Kimi 网络异常", error: .network),
-            failure(provider: .siliconFlow, label: "SiliconFlow 认证失败", error: .authentication),
-            failure(provider: .siliconFlow, label: "SiliconFlow 响应异常", error: .malformedResponse),
+            failure(provider: .deepSeek, label: "DeepSeek 认证失败", error: .authentication),
+            failure(provider: .moonshot, label: "Kimi 响应异常", error: .malformedResponse),
             failure(provider: .openRouter, label: "OpenRouter 权限不足", error: .permission),
             failure(provider: .openRouter, label: "OpenRouter 未知错误", error: .unknown),
         ]

@@ -32,15 +32,16 @@ extension BalanceDataSource {
         }
     }
 
-    /// Mock mode: every supported Provider routes to the deterministic mock
-    /// adapter, and the Accounts come from the same fixture set.
+    /// Mock mode: every addable Provider routes to the deterministic mock
+    /// adapter, and the Accounts come from the same fixture set. Legacy
+    /// SiliconFlow fixtures stay in the list to exercise the unsupported state.
     static func mock(now: Date) -> BalanceDataSource {
         let fixtures = MockFixtures.standard(now: now)
         let mockProvider = BalanceProviderAdapter(
             provider: MockBalanceProvider(fixtures: fixtures)
         )
         var adapters: [ProviderAdapterKey: any AccountProvider] = [:]
-        for provider in Provider.allCases {
+        for provider in Provider.addableCases {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
         }
         return BalanceDataSource(

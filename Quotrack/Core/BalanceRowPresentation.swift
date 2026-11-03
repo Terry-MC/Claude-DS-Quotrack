@@ -12,6 +12,8 @@ enum BalanceRowTone: Equatable, Sendable {
     case stale
     /// The Provider reported the Account as unavailable.
     case unavailable
+    /// The Account's Provider is no longer supported; the row is legacy-only.
+    case unsupported
     /// The last refresh failed.
     case error
     /// No Snapshot and no failure yet.
@@ -58,14 +60,19 @@ enum BalanceRowPresentation {
     private static let relativeLocale = Locale(identifier: "zh_CN")
 
     static func viewState(for row: BalanceRow, now: Date) -> BalanceRowViewState {
-        BalanceRowViewState(
+        let status = row.isUnsupported ? SnapshotStatus.unsupported : row.status
+        return BalanceRowViewState(
             id: row.id,
             providerName: row.account.provider.displayName,
             label: row.account.label,
-            balanceText: row.balanceSnapshot.map(balanceText(for:)) ?? placeholder,
-            updatedText: row.snapshot.map { relativeText(for: $0.fetchedAt, now: now) } ?? placeholder,
-            statusText: row.status.map(statusText(for:)) ?? placeholder,
-            status: row.status,
+            balanceText: row.isUnsupported
+                ? placeholder
+                : row.balanceSnapshot.map(balanceText(for:)) ?? placeholder,
+            updatedText: row.isUnsupported
+                ? placeholder
+                : row.snapshot.map { relativeText(for: $0.fetchedAt, now: now) } ?? placeholder,
+            statusText: status.map(statusText(for:)) ?? placeholder,
+            status: status,
             tone: tone(for: row)
         )
     }
@@ -77,6 +84,10 @@ enum BalanceRowPresentation {
     /// still normal. No Snapshot or no threshold means there is nothing to
     /// compare.
     static func tone(for row: BalanceRow) -> BalanceRowTone {
+        // A legacy Provider is a permanent state, not a transient failure.
+        if row.isUnsupported {
+            return .unsupported
+        }
         // A current failure outranks any freshness label, including a Stale
         // Snapshot, so an old Balance never hides an active error.
         if row.error != nil {
@@ -92,6 +103,8 @@ enum BalanceRowPresentation {
             return .stale
         case .unavailable:
             return .unavailable
+        case .unsupported:
+            return .unsupported
         case .fresh:
             guard
                 let threshold = row.account.lowBalanceThreshold,
@@ -108,6 +121,15 @@ enum BalanceRowPresentation {
         for row: BalanceRow,
         timeZone: TimeZone = .current
     ) -> BalanceRowDetailViewState {
+        guard !row.isUnsupported else {
+            return BalanceRowDetailViewState(
+                accountID: row.id,
+                balanceText: nil,
+                fetchedAtText: nil,
+                errorText: nil,
+                breakdown: []
+            )
+        }
         let snapshot = row.balanceSnapshot
         return BalanceRowDetailViewState(
             accountID: row.id,
@@ -168,6 +190,7 @@ enum BalanceRowPresentation {
         case .fresh: "正常"
         case .stale: "已过期"
         case .unavailable: "不可用"
+        case .unsupported: UIStrings.unsupportedProviderState
         case .error: "错误"
         }
     }

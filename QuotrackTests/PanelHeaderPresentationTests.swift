@@ -36,6 +36,16 @@ struct PanelHeaderPresentationTests {
         #expect(header.healthyCount == 0)
         #expect(header.errorCount == 0)
     }
+
+    @Test
+    func unsupportedRowsAreCountedAsNeitherHealthyNorInError() {
+        let rows = [makeRow(status: .unsupported)]
+
+        let header = PanelHeaderPresentation.viewState(for: rows)
+
+        #expect(header.healthyCount == 0)
+        #expect(header.errorCount == 0)
+    }
 }
 
 private func makeRow(

@@ -17,6 +17,19 @@ struct MockModeTests {
 
         let deepSeekRows = monitor.rows.filter { $0.account.provider == .deepSeek }
         #expect(deepSeekRows.count >= 2)
+
+        let legacyRow = try #require(
+            monitor.rows.first {
+                $0.account.provider == .siliconFlow
+                    && $0.account.label == "SiliconFlow 国内"
+            }
+        )
+        #expect(legacyRow.status == .unsupported)
+        #expect(legacyRow.snapshot == nil)
+        #expect(
+            BalanceRowPresentation.viewState(for: legacyRow, now: now)
+                .statusText == UIStrings.unsupportedProviderState
+        )
     }
 
     @Test
@@ -81,9 +94,9 @@ struct MockModeTests {
         await monitor.refresh()
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
-        #expect(header.healthyCount == 4)
+        #expect(header.healthyCount == 3)
         #expect(header.errorCount == 7)
-        #expect(header.healthyText == "正常 4")
+        #expect(header.healthyText == "正常 3")
         #expect(header.errorText == "错误 7")
     }
 
@@ -158,7 +171,7 @@ struct MockModeTests {
 
         let balancedRows = monitor.rows.filter { $0.balanceSnapshot != nil }
         #expect(balancedRows.contains { $0.balanceSnapshot?.breakdown == nil })
-        #expect(balancedRows.filter { $0.balanceSnapshot?.breakdown != nil }.count >= 4)
+        #expect(balancedRows.filter { $0.balanceSnapshot?.breakdown != nil }.count >= 3)
     }
 
     @Test

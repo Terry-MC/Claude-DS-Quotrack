@@ -29,7 +29,7 @@ struct ManualRefreshTests {
         let accounts = [
             Account(id: UUID(), provider: .deepSeek, label: "个人账户"),
             Account(id: UUID(), provider: .moonshot, label: "工作账户"),
-            Account(id: UUID(), provider: .siliconFlow, label: "国内账户"),
+            Account(id: UUID(), provider: .openRouter, label: "管理账户"),
         ]
         let provider = RecordingBalanceProvider(snapshot: makeSnapshot)
         let monitor = LiveBalanceMonitor(

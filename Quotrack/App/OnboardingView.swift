@@ -57,7 +57,7 @@ struct OnboardingView: View {
     private var providerStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             Picker(UIStrings.onboardingProviderTitle, selection: $model.selectedProvider) {
-                ForEach(Provider.allCases, id: \.self) { provider in
+                ForEach(Provider.addableCases, id: \.self) { provider in
                     Text(provider.displayName).tag(provider)
                 }
             }

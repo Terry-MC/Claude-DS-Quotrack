@@ -182,12 +182,10 @@ struct OnboardingTests {
     @Test
     func accountDetailsAreTrimmedBeforeSaving() async throws {
         let context = makeContext()
-        context.model.selectedProvider = .siliconFlow
-        context.model.advance()
-        context.model.selectedRegion = .domestic
+        context.model.selectedProvider = .deepSeek
         context.model.advance()
         context.model.label = "  国内账户  "
-        context.model.credential = "sk-silicon"
+        context.model.credential = "sk-deepseek"
 
         await context.model.submit()
 

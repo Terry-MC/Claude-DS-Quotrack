@@ -21,6 +21,9 @@ enum SnapshotStatus: String, Sendable, Equatable {
     case fresh
     case stale
     case unavailable
+    /// A persisted Account whose Provider is no longer supported. It is never
+    /// polled and remains deletable.
+    case unsupported
     case error
 }
 

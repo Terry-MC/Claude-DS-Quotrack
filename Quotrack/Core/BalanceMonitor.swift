@@ -22,6 +22,12 @@ struct BalanceRow: Identifiable, Equatable, Sendable {
 
     var id: Account.ID { account.id }
 
+    /// A legacy Account whose Provider is no longer supported. It is never
+    /// polled, and its previous Snapshot is not presented as a live Balance.
+    var isUnsupported: Bool {
+        !account.provider.isSupported
+    }
+
     /// The v1 Balance view of this row. Quota rows return nil until their own
     /// presentation arrives.
     var balanceSnapshot: BalanceSnapshot? {
@@ -108,6 +114,12 @@ final class LiveBalanceMonitor: BalanceMonitor {
         AggregateBalanceState.derive(from: rows)
     }
 
+    /// Accounts the monitor may query. Legacy Accounts remain in `rows` so the
+    /// panel can show their unsupported state, but they never enter a fetch.
+    private var pollableAccounts: [Account] {
+        accounts.filter { $0.provider.isSupported }
+    }
+
     var pollingInterval: TimeInterval {
         get { configuredPollingInterval }
         set {
@@ -116,7 +128,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
             }
             configuredPollingInterval = newValue
             let now = now()
-            for account in accounts {
+            for account in pollableAccounts {
                 guard var schedule = schedules[account.id],
                       schedule.consecutiveFailures == 0 else {
                     continue
@@ -150,7 +162,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         self.store = store
         let firstAttempt = clock.now.addingTimeInterval(pollingInterval)
         self.schedules = Dictionary(
-            uniqueKeysWithValues: accounts.map {
+            uniqueKeysWithValues: accounts.filter { $0.provider.isSupported }.map {
                 ($0.id, AccountSchedule(nextAutomaticAttemptAt: firstAttempt))
             }
         )
@@ -280,7 +292,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     }
 
     private func accountsDue(at date: Date) -> [Account] {
-        accounts.filter { account in
+        pollableAccounts.filter { account in
             guard let schedule = schedules[account.id] else {
                 return true
             }
@@ -289,8 +301,10 @@ final class LiveBalanceMonitor: BalanceMonitor {
     }
 
     private func nextScheduledDeadline(after date: Date) -> Date {
-        var deadlines = accounts.compactMap { schedules[$0.id]?.nextAutomaticAttemptAt }
-        for row in rows {
+        var deadlines = pollableAccounts.compactMap {
+            schedules[$0.id]?.nextAutomaticAttemptAt
+        }
+        for row in rows where !row.isUnsupported {
             guard let snapshot = row.snapshot, snapshot.isAvailable else {
                 continue
             }
@@ -333,7 +347,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         rows = initialRows(for: dataSource.accounts, store: store)
         let firstAttempt = now().addingTimeInterval(pollingInterval)
         schedules = Dictionary(
-            uniqueKeysWithValues: accounts.map {
+            uniqueKeysWithValues: accounts.filter { $0.provider.isSupported }.map {
                 ($0.id, AccountSchedule(nextAutomaticAttemptAt: firstAttempt))
             }
         )
@@ -351,10 +365,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
         return accounts.map { account in
             let snapshot = persisted[account.id]
             let matching = snapshot?.accountID == account.id ? snapshot : nil
+            let rowStatus: SnapshotStatus?
+            if account.provider.isSupported {
+                rowStatus = matching.flatMap { status(for: $0, error: nil, at: now()) }
+            } else {
+                rowStatus = .unsupported
+            }
             return BalanceRow(
                 account: account,
                 snapshot: matching,
-                status: matching.flatMap { status(for: $0, error: nil, at: now()) }
+                status: rowStatus
             )
         }
     }
@@ -362,13 +382,14 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// Refreshes every Account concurrently, bounded by the global fetch cap.
     /// Manual refreshes bypass any Account's pending backoff.
     func refresh() async {
-        await refreshAccounts(accounts)
+        await refreshAccounts(pollableAccounts)
     }
 
     /// Refreshes exactly one Account, sharing the same fetch cap as polling.
-    /// A manual refresh bypasses that Account's pending backoff.
+    /// A manual refresh bypasses that Account's pending backoff. A legacy
+    /// Account is left untouched because its credential must not be used.
     func refresh(accountID: Account.ID) async {
-        guard let account = accounts.first(where: { $0.id == accountID }) else {
+        guard let account = pollableAccounts.first(where: { $0.id == accountID }) else {
             return
         }
         await refreshAccounts([account])
@@ -460,10 +481,13 @@ final class LiveBalanceMonitor: BalanceMonitor {
         guard let index = rows.firstIndex(where: { $0.account.id == snapshot.accountID }) else {
             return
         }
+        let newStatus = rows[index].isUnsupported
+            ? SnapshotStatus.unsupported
+            : status(for: snapshot, error: nil, at: now())
         rows[index] = BalanceRow(
             account: rows[index].account,
             snapshot: snapshot,
-            status: status(for: snapshot, error: nil, at: now())
+            status: newStatus
         )
         // Persistence is best-effort: a disk problem must never turn a
         // successful Balance query into an error for the Account.
@@ -489,7 +513,9 @@ final class LiveBalanceMonitor: BalanceMonitor {
         var changed = false
         for index in updated.indices {
             let row = updated[index]
-            let newStatus = status(for: row.snapshot, error: row.error, at: now)
+            let newStatus = row.isUnsupported
+                ? SnapshotStatus.unsupported
+                : status(for: row.snapshot, error: row.error, at: now)
             guard newStatus != row.status else {
                 continue
             }
