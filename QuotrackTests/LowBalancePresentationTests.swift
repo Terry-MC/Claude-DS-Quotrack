@@ -123,8 +123,8 @@ struct LowBalancePresentationTests {
     func rowThatHasNotLoadedYetIsPending() {
         let account = Account(
             id: UUID(),
-            provider: .siliconFlow,
-            label: "SiliconFlow 国内",
+            provider: .deepSeek,
+            label: "个人账户",
             lowBalanceThreshold: Decimal(string: "50")
         )
         let row = BalanceRow(account: account, snapshot: nil, status: nil)

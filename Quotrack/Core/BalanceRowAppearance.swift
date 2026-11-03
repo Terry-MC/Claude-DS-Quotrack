@@ -49,6 +49,12 @@ extension BalanceRowTone {
                 balance: .warning,
                 aggregateState: .warning
             )
+        case .unsupported:
+            BalanceRowAppearance(
+                status: .muted,
+                balance: .muted,
+                aggregateState: .normal
+            )
         case .error:
             BalanceRowAppearance(
                 status: .error,

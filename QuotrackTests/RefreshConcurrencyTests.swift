@@ -103,7 +103,7 @@ struct RefreshConcurrencyTests {
     func eachAccountReportsItsOwnErrorCategory() async throws {
         let authenticationAccount = Account(id: UUID(), provider: .deepSeek, label: "认证")
         let networkAccount = Account(id: UUID(), provider: .moonshot, label: "网络")
-        let malformedAccount = Account(id: UUID(), provider: .siliconFlow, label: "解析")
+        let malformedAccount = Account(id: UUID(), provider: .deepSeek, label: "解析")
         let unknownAccount = Account(id: UUID(), provider: .openRouter, label: "未知")
         let healthyAccount = Account(id: UUID(), provider: .deepSeek, label: "正常")
         let accounts = [

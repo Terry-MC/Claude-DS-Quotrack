@@ -183,6 +183,7 @@ struct PersistenceLaunchTests {
         #expect(dataSource.accounts == [account])
         #expect(monitor.rows.map(\.account) == [account])
         #expect(monitor.rows.first?.balanceSnapshot == snapshot)
+        #expect(monitor.rows.first?.status == .unsupported)
     }
 
     @Test
@@ -215,7 +216,7 @@ struct PersistenceLaunchTests {
 
     @Test
     func persistedSnapshotForADifferentAccountIsIgnored() throws {
-        let account = Account(id: UUID(), provider: .siliconFlow, label: "SiliconFlow 国内")
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
         let otherAccount = Account(id: UUID(), provider: .openRouter, label: "OpenRouter")
         let otherSnapshot = BalanceSnapshot(
             accountID: otherAccount.id,

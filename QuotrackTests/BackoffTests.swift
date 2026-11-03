@@ -149,7 +149,7 @@ struct BackoffTests {
     func manualRefreshOfOneAccountBypassesBackoff() async throws {
         let start = Date(timeIntervalSince1970: 1_800_000_000)
         let clock = TestPollingClock(now: start)
-        let account = Account(id: UUID(), provider: .siliconFlow, label: "国内账户")
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
         let log = FetchLog()
         let provider = RecordingBalanceProvider { account in
             log.record(account.id, at: clock.now)

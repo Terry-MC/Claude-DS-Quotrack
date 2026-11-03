@@ -28,6 +28,8 @@ enum UIStrings {
     static let malformedResponseError = "响应格式异常，无法解析。"
     static let unsupportedAccountKindError = "该账户类型暂不支持。"
     static let unknownError = "未知错误，请稍后重试。"
+    /// The row state for a persisted Account whose Provider was dropped.
+    static let unsupportedProviderState = "不再支持"
 
     // Expanded row
     static let preciseBalanceLabel = "精确余额"
@@ -59,7 +61,10 @@ enum UIStrings {
     static let openLoginItemsSettings = "打开系统设置"
     static let settingsUnsupportedTitle = "不可查厂商"
     static let unsupportedProvidersExplanation = """
-    OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此 Quotrack v1 不会显示这些厂商。余额与消耗、配额是不同指标，混在一起会误导用户。详见 ADR-0001。
+    SiliconFlow 的个人余额接口已停止服务，已有账户会显示为“不再支持”，不会轮询，可以删除。OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此不会出现在可添加厂商中。余额与消耗、配额是不同指标，详见 ADR-0001 与 ADR-0002。
+    """
+    static let settingsDeferredIntegrationsExplanation = """
+    WorkBuddy、Claude Pro/Max、ChatGPT/Codex、Gemini CLI 和 SuperGrok 需要读取桌面应用或 CLI 的 OAuth 登录状态，v2 暂不支持。Quotrack 不会读取浏览器 Cookie、桌面容器或 CLI 凭证；相关本地桥接计划见 ADR-0002。
     """
     static let lowBalanceWarningTitle = "低余额提醒"
     static let lowBalanceWarningToggle = "启用低余额提醒"

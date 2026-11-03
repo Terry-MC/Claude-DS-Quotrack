@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// The full Settings surface: the Account list, the app-wide Polling
-/// Interval, the Launch at Login toggle, and why unsupported Providers are
-/// absent. Account editing includes the per-Account low-Balance threshold,
-/// which defaults to off.
+/// Interval, the Launch at Login toggle, and why unsupported and deferred
+/// Providers are absent. Account editing includes the per-Account low-Balance
+/// threshold, which defaults to off.
 @MainActor
 struct SettingsView: View {
     let manager: AccountManager
@@ -177,6 +177,10 @@ struct SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text(UIStrings.settingsDeferredIntegrationsExplanation)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -245,6 +249,9 @@ private struct AccountRow: View {
         var parts = [account.provider.displayName]
         if let region = account.region {
             parts.append(region.displayName)
+        }
+        if !account.provider.isSupported {
+            parts.append(UIStrings.unsupportedProviderState)
         }
         if let threshold = account.lowBalanceThreshold {
             parts.append("\(UIStrings.lowBalanceThresholdSaved) \(threshold.description)")

@@ -107,7 +107,7 @@ struct BalanceRowPresentationTests {
     @Test
     func detailViewStateShowsTheExactFetchTimeInTheGivenTimeZone() {
         let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        let account = Account(id: UUID(), provider: .siliconFlow, label: "国内账户")
+        let account = Account(id: UUID(), provider: .openRouter, label: "管理账户")
         let snapshot = BalanceSnapshot(
             accountID: account.id,
             balance: Balance(amount: Decimal(string: "15.00")!, currency: .cny),
@@ -132,7 +132,7 @@ struct BalanceRowPresentationTests {
         (BalanceProviderError.permission, Provider.openRouter, "权限不足，OpenRouter 需要管理密钥。"),
         (BalanceProviderError.network, Provider.moonshot, "网络错误，请检查网络连接。"),
         (BalanceProviderError.rateLimit, Provider.deepSeek, "请求过于频繁，请稍后重试。"),
-        (BalanceProviderError.malformedResponse, Provider.siliconFlow, "响应格式异常，无法解析。"),
+        (BalanceProviderError.malformedResponse, Provider.deepSeek, "响应格式异常，无法解析。"),
         (BalanceProviderError.unknown, Provider.openRouter, "未知错误，请稍后重试。"),
     ])
     func detailViewStateMapsTypedErrorsToChineseDetail(
@@ -189,6 +189,41 @@ struct BalanceRowPresentationTests {
         #expect(detail.errorText == nil)
     }
 
+    @Test
+    func aLegacyUnsupportedRowHidesBalanceAndShowsTheUnsupportedState() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .siliconFlow,
+            region: .domestic,
+            label: "SiliconFlow 国内"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "15.00")!, currency: .cny),
+            fetchedAt: now.addingTimeInterval(-120),
+            isAvailable: true
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .balance(snapshot),
+            status: .unsupported
+        )
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(viewState.status == .unsupported)
+        #expect(viewState.statusText == UIStrings.unsupportedProviderState)
+        #expect(viewState.balanceText == "—")
+        #expect(viewState.updatedText == "—")
+        #expect(viewState.tone == .unsupported)
+        #expect(detail.balanceText == nil)
+        #expect(detail.fetchedAtText == nil)
+        #expect(detail.breakdown.isEmpty)
+        #expect(detail.errorText == nil)
+    }
+
     @Test(arguments: [
         (
             BalanceRowTone.normal,
@@ -224,6 +259,12 @@ struct BalanceRowPresentationTests {
             BalanceRowTone.pending,
             .pending,
             .primary,
+            .normal
+        ),
+        (
+            BalanceRowTone.unsupported,
+            .muted,
+            .muted,
             .normal
         ),
     ])
