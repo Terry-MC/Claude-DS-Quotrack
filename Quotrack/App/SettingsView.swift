@@ -1,9 +1,9 @@
 import SwiftUI
 
 /// The full Settings surface: the Account list, the app-wide Polling
-/// Interval, the Launch at Login toggle, and why unsupported Providers are
-/// absent. Account editing includes the per-Account low-Balance threshold,
-/// which defaults to off.
+/// Interval, the Launch at Login toggle, and why unsupported and deferred
+/// Providers are absent. Account editing includes the per-Account low-Balance
+/// threshold, which defaults to off.
 @MainActor
 struct SettingsView: View {
     let manager: AccountManager
@@ -59,7 +59,7 @@ struct SettingsView: View {
                 accountPendingDeletion = nil
             }
         } message: {
-            Text("该账户的钥匙串凭证和已保存的余额快照都会被移除。")
+            Text(UIStrings.deleteAccountConfirmation)
         }
     }
 
@@ -177,6 +177,10 @@ struct SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Text(UIStrings.settingsDeferredIntegrationsExplanation)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -235,20 +239,50 @@ private struct AccountRow: View {
 
             Spacer(minLength: 12)
 
-            Button("编辑", action: onEdit)
+            if account.provider.isSupported {
+                Button("编辑", action: onEdit)
+            }
             Button("删除", role: .destructive, action: onDelete)
         }
         .padding(.vertical, 8)
     }
 
     private var detailText: String {
-        var parts = [account.provider.displayName]
+        var parts = [account.provider.displayName, account.kind.displayName]
         if let region = account.region {
             parts.append(region.displayName)
         }
-        if let threshold = account.lowBalanceThreshold {
-            parts.append("\(UIStrings.lowBalanceThresholdSaved) \(threshold.description)")
+        if !account.provider.isSupported {
+            parts.append(UIStrings.unsupportedProviderState)
         }
+
+        let thresholds = account.thresholds
+        var thresholdParts: [String] = []
+        if let warning = thresholds.warning {
+            thresholdParts.append(
+                "\(UIStrings.warningThresholdShort) \(thresholdValue(warning))"
+            )
+        }
+        if let critical = thresholds.critical {
+            thresholdParts.append(
+                "\(UIStrings.criticalThresholdShort) \(thresholdValue(critical))"
+            )
+        }
+        parts.append(
+            thresholdParts.isEmpty
+                ? UIStrings.thresholdUnset
+                : thresholdParts.joined(separator: " / ")
+        )
         return parts.joined(separator: " · ")
+    }
+
+    private func thresholdValue(_ value: Decimal) -> String {
+        if account.kind == .subscription {
+            return "\(value)%"
+        }
+        let currency = account.currency
+            ?? account.provider.defaultCurrency(for: account.region)
+        let symbol = currency?.symbol ?? ""
+        return "\(symbol)\(value)"
     }
 }

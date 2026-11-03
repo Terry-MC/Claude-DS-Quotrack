@@ -65,7 +65,12 @@ struct MonitorSeamTests {
                 isAvailable: true
             )
         }
-        return BalanceRow(account: account, snapshot: snapshot, status: status, error: error)
+        return BalanceRow(
+            account: account,
+            snapshot: snapshot.map(AccountSnapshot.balance),
+            status: status,
+            error: error
+        )
     }
 }
 
@@ -86,4 +91,6 @@ private final class FakeMonitor: BalanceMonitor {
     func refresh() async {}
 
     func refresh(accountID: Account.ID) async {}
+
+    func refresh(provider: Provider) async {}
 }

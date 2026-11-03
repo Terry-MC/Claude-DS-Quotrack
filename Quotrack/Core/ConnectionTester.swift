@@ -4,7 +4,7 @@ import Foundation
 /// this seam, so tests can prove success and failure without network access,
 /// and mock mode can walk the same flow with fixtures.
 protocol ConnectionTesting: Sendable {
-    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot
+    func testConnection(_ draft: AccountDraft) async throws -> AccountSnapshot
 }
 
 /// The development adapter: it succeeds without a network request or a saved
@@ -23,33 +23,61 @@ struct MockConnectionTester: ConnectionTesting {
         self.amount = amount
     }
 
-    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot {
-        BalanceSnapshot(
-            accountID: UUID(),
-            balance: Balance(amount: amount, currency: .cny),
-            fetchedAt: now(),
-            isAvailable: true
+    func testConnection(_ draft: AccountDraft) async throws -> AccountSnapshot {
+        guard draft.provider.supportedKinds.contains(draft.kind) else {
+            throw BalanceProviderError.unsupportedAccountKind
+        }
+        let timestamp = now()
+        if draft.kind == .subscription {
+            return .quota(
+                QuotaSnapshot(
+                    accountID: UUID(),
+                    limit: 100,
+                    remaining: 60,
+                    resetAt: timestamp.addingTimeInterval(86_400),
+                    fetchedAt: timestamp,
+                    windows: [
+                        QuotaWindow(
+                            name: "5 小时窗口",
+                            limit: 100,
+                            remaining: 85,
+                            resetAt: timestamp.addingTimeInterval(3_600)
+                        ),
+                    ]
+                )
+            )
+        }
+        let currency = draft.provider.defaultCurrency(for: draft.region) ?? .cny
+        return .balance(
+            BalanceSnapshot(
+                accountID: UUID(),
+                balance: Balance(amount: amount, currency: currency),
+                fetchedAt: timestamp,
+                isAvailable: true
+            )
         )
     }
 }
 
 /// The live test-connection implementation. Provider adapters are registered
-/// here as they arrive; until then, an unregistered Provider reports an
-/// unknown failure rather than a false success.
+/// here as they arrive; until then, an unregistered Provider or kind reports a
+/// typed failure rather than a false success.
 struct ProviderRegistryConnectionTester: ConnectionTesting {
-    private let adapters: [Provider: any CredentialBalanceAdapter]
+    private let adapters: [ProviderAdapterKey: any CredentialAccountAdapter]
 
-    init(adapters: [Provider: any CredentialBalanceAdapter]) {
+    init(adapters: [ProviderAdapterKey: any CredentialAccountAdapter]) {
         self.adapters = adapters
     }
 
-    func testConnection(_ draft: AccountDraft) async throws -> BalanceSnapshot {
-        guard let adapter = adapters[draft.provider] else {
-            throw BalanceProviderError.unknown
+    func testConnection(_ draft: AccountDraft) async throws -> AccountSnapshot {
+        let key = ProviderAdapterKey(provider: draft.provider, kind: draft.kind)
+        guard let adapter = adapters[key] else {
+            throw BalanceProviderError.unsupportedAccountKind
         }
-        return try await adapter.fetchBalance(
+        return try await adapter.fetchSnapshot(
             region: draft.region,
-            credential: draft.credential
+            credential: draft.credential,
+            kind: draft.kind
         )
     }
 }
@@ -63,12 +91,22 @@ extension ProviderRegistryConnectionTester {
         transport: any HTTPTransport = URLSessionTransport(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) -> ProviderRegistryConnectionTester {
-        ProviderRegistryConnectionTester(
-            adapters: LiveBalanceAdapters.make(
-                credentialStore: credentialStore,
+        let balanceAdapters = LiveBalanceAdapters.make(
+            credentialStore: credentialStore,
+            transport: transport,
+            now: now
+        )
+        var adapters: [ProviderAdapterKey: any CredentialAccountAdapter] = [:]
+        for (provider, adapter) in balanceAdapters {
+            adapters[ProviderAdapterKey(provider: provider, kind: .balance)] =
+                BalanceCredentialAdapter(adapter: adapter)
+        }
+        adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
+            KimiCodeAdapter(
                 transport: transport,
+                credentialStore: credentialStore,
                 now: now
             )
-        )
+        return ProviderRegistryConnectionTester(adapters: adapters)
     }
 }

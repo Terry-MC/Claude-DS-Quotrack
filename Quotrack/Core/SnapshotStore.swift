@@ -6,11 +6,24 @@ import Foundation
 protocol SnapshotStore: Sendable {
     func loadAccounts() -> [Account]
     func saveAccounts(_ accounts: [Account]) throws
-    func loadSnapshots() -> [Account.ID: BalanceSnapshot]
-    func saveSnapshot(_ snapshot: BalanceSnapshot) throws
+    func loadSnapshots() -> [Account.ID: AccountSnapshot]
+    func saveSnapshot(_ snapshot: AccountSnapshot) throws
     /// Removes the Account's metadata and its persisted Snapshot. Account CRUD
     /// calls this so a deleted Account leaves nothing behind on disk.
     func deleteAccount(id: Account.ID) throws
+}
+
+extension SnapshotStore {
+    /// v1 compatibility: existing callers save a Balance Snapshot directly.
+    func saveSnapshot(_ snapshot: BalanceSnapshot) throws {
+        try saveSnapshot(.balance(snapshot))
+    }
+
+    /// The Balance-only view used by the v1 UI and by tests that still reason
+    /// in terms of Balance Snapshots.
+    func loadBalanceSnapshots() -> [Account.ID: BalanceSnapshot] {
+        loadSnapshots().compactMapValues { $0.balanceSnapshot }
+    }
 }
 
 /// Persists Account metadata as JSON under a directory. Writes are atomic, and
@@ -58,17 +71,17 @@ struct FileSnapshotStore: SnapshotStore {
 
     /// Only the last successful Snapshot per Account is kept, which is all the
     /// panel needs before its first refresh on the next launch.
-    func loadSnapshots() -> [Account.ID: BalanceSnapshot] {
+    func loadSnapshots() -> [Account.ID: AccountSnapshot] {
         guard
             let data = try? Data(contentsOf: directoryURL.appendingPathComponent(FileName.snapshots)),
-            let snapshots = try? JSONDecoder().decode([BalanceSnapshot].self, from: data)
+            let snapshots = try? JSONDecoder().decode([AccountSnapshot].self, from: data)
         else {
             return [:]
         }
         return Dictionary(snapshots.map { ($0.accountID, $0) }, uniquingKeysWith: { _, latest in latest })
     }
 
-    func saveSnapshot(_ snapshot: BalanceSnapshot) throws {
+    func saveSnapshot(_ snapshot: AccountSnapshot) throws {
         var snapshots = loadSnapshots()
         snapshots[snapshot.accountID] = snapshot
         try writeSnapshots(snapshots)
@@ -81,7 +94,7 @@ struct FileSnapshotStore: SnapshotStore {
         try writeSnapshots(snapshots)
     }
 
-    private func writeSnapshots(_ snapshots: [Account.ID: BalanceSnapshot]) throws {
+    private func writeSnapshots(_ snapshots: [Account.ID: AccountSnapshot]) throws {
         let ordered = snapshots.values.sorted { $0.accountID.uuidString < $1.accountID.uuidString }
         let data = try JSONEncoder().encode(ordered)
         try write(data, fileName: FileName.snapshots)

@@ -19,9 +19,9 @@ struct AdapterWiringTests {
             now: { wiring.now }
         )
 
-        let snapshot = try await registry.fetchBalance(for: wiring.account)
+        let snapshot = try await registry.fetchSnapshot(for: wiring.account)
 
-        #expect(snapshot.balance == wiring.expectedBalance)
+        #expect(snapshot.balanceSnapshot?.balance == wiring.expectedBalance)
         let request = try #require(transport.requests.first)
         #expect(transport.requests.count == 1)
         #expect(request.url == wiring.expectedEndpoint)
@@ -57,7 +57,7 @@ struct AdapterWiringTests {
         await monitor.refresh()
 
         #expect(
-            monitor.rows.first?.snapshot?.balance
+            monitor.rows.first?.balanceSnapshot?.balance
                 == wiring.expectedBalance
         )
         #expect(transport.requests.first?.url == wiring.expectedEndpoint)
@@ -85,7 +85,7 @@ struct AdapterWiringTests {
             )
         )
 
-        #expect(snapshot.balance == wiring.expectedBalance)
+        #expect(snapshot.balanceSnapshot?.balance == wiring.expectedBalance)
         #expect(snapshot.isAvailable)
         let request = try #require(transport.requests.first)
         #expect(request.url == wiring.expectedEndpoint)
@@ -100,9 +100,72 @@ struct AdapterWiringTests {
         let registry = ProviderRegistry(adapters: [:])
         let account = Account(id: UUID(), provider: .moonshot, label: "Kimi")
 
-        await #expect(throws: BalanceProviderError.unknown) {
-            try await registry.fetchBalance(for: account)
+        await #expect(throws: BalanceProviderError.unsupportedAccountKind) {
+            try await registry.fetchSnapshot(for: account)
         }
+    }
+
+    @Test
+    func theLiveAdapterMapOmitsLegacySiliconFlow() {
+        let adapters = LiveBalanceAdapters.make(
+            credentialStore: InMemoryCredentialStore(),
+            transport: StubHTTPTransport(
+                response: .json(body: SiliconFlowFixtures.domesticSuccess)
+            )
+        )
+
+        #expect(Set(adapters.keys) == Set(Provider.addableCases))
+        #expect(adapters[.siliconFlow] == nil)
+    }
+
+    @Test
+    func aLegacySiliconFlowAccountIsRejectedWithoutANetworkRequest() async {
+        let account = Account(
+            id: UUID(),
+            provider: .siliconFlow,
+            region: .domestic,
+            label: "SiliconFlow 国内"
+        )
+        let transport = StubHTTPTransport(
+            response: .json(body: SiliconFlowFixtures.domesticSuccess)
+        )
+        let credentials = InMemoryCredentialStore(
+            credentials: [account.id: "sk-legacy-siliconflow"]
+        )
+        let registry = ProviderRegistry.live(
+            credentialStore: credentials,
+            transport: transport
+        )
+
+        await #expect(throws: BalanceProviderError.unsupportedAccountKind) {
+            try await registry.fetchSnapshot(for: account)
+        }
+
+        #expect(transport.requests.isEmpty)
+    }
+
+    @Test
+    func aLegacySiliconFlowDraftIsRejectedByTheLiveTesterWithoutANetworkRequest() async {
+        let transport = StubHTTPTransport(
+            response: .json(body: SiliconFlowFixtures.domesticSuccess)
+        )
+        let tester = ProviderRegistryConnectionTester.live(
+            credentialStore: InMemoryCredentialStore(),
+            transport: transport
+        )
+
+        await #expect(throws: BalanceProviderError.unsupportedAccountKind) {
+            try await tester.testConnection(
+                AccountDraft(
+                    provider: .siliconFlow,
+                    region: .domestic,
+                    label: "SiliconFlow 国内",
+                    credential: "sk-entered-siliconflow"
+                )
+            )
+        }
+
+        #expect(transport.requests.isEmpty)
     }
 }
 
@@ -167,40 +230,6 @@ private let wiringCases: [WiringCase] = [
             currency: .usd
         ),
         expectedEndpoint: MoonshotAdapter.internationalEndpoint
-    ),
-    WiringCase(
-        name: "SiliconFlow 国内",
-        account: Account(
-            id: UUID(),
-            provider: .siliconFlow,
-            region: .domestic,
-            label: "硅基流动"
-        ),
-        storedCredential: "sk-test",
-        enteredCredential: "sk-entered",
-        fixture: SiliconFlowFixtures.domesticSuccess,
-        expectedBalance: Balance(
-            amount: Decimal(string: "88.88")!,
-            currency: .cny
-        ),
-        expectedEndpoint: SiliconFlowAdapter.domesticEndpoint
-    ),
-    WiringCase(
-        name: "SiliconFlow 国际",
-        account: Account(
-            id: UUID(),
-            provider: .siliconFlow,
-            region: .international,
-            label: "SiliconFlow Global"
-        ),
-        storedCredential: "sk-global",
-        enteredCredential: "sk-entered",
-        fixture: SiliconFlowFixtures.internationalSuccess,
-        expectedBalance: Balance(
-            amount: Decimal(string: "25.00")!,
-            currency: .usd
-        ),
-        expectedEndpoint: SiliconFlowAdapter.internationalEndpoint
     ),
     WiringCase(
         name: "OpenRouter",

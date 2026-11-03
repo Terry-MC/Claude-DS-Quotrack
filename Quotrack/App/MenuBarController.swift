@@ -56,6 +56,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         panelController.show()
     }
 
+    /// Reveals the panel for a notification click and focuses the Account the
+    /// aggregated notification points at.
+    func showPanel(focusing accountID: Account.ID) {
+        panelController.show(focusing: accountID)
+    }
+
     private func configureStatusItem() {
         guard let button = statusItem.button else {
             return

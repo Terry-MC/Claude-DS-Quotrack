@@ -3,6 +3,29 @@ import Foundation
 /// A BalanceProvider for the mock slice. It returns one fixed Balance
 /// Snapshot for any Account, so the UI and monitor run without credentials,
 /// network, or Keychain access.
+/// A deterministic Quota source for mock-mode subscription Accounts and
+/// previews. The weekly quota is primary; the 5-hour window is secondary.
+struct MockQuotaProvider: AccountProvider {
+    private let snapshots: [Account.ID: QuotaSnapshot]
+
+    init(now: Date) {
+        self.init(fixtures: MockFixtures.quotaFixtures(now: now))
+    }
+
+    init(fixtures: [MockQuotaFixture]) {
+        self.snapshots = Dictionary(
+            uniqueKeysWithValues: fixtures.map { ($0.account.id, $0.snapshot) }
+        )
+    }
+
+    func fetchSnapshot(for account: Account) async throws -> AccountSnapshot {
+        guard let snapshot = snapshots[account.id] else {
+            throw BalanceProviderError.unknown
+        }
+        return .quota(snapshot)
+    }
+}
+
 struct MockBalanceProvider: BalanceProvider {
     static let amount = Decimal(string: "42.50")!
     static let currency = Currency.cny

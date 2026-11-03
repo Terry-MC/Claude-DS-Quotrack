@@ -4,7 +4,7 @@ import Foundation
 /// this value while the monitor, UI, and refresh behavior stay real.
 struct BalanceDataSource: Sendable {
     let accounts: [Account]
-    let provider: any BalanceProvider
+    let provider: any AccountProvider
 }
 
 extension BalanceDataSource {
@@ -32,19 +32,24 @@ extension BalanceDataSource {
         }
     }
 
-    /// Mock mode: every supported Provider routes to the deterministic mock
-    /// adapter, and the Accounts come from the same fixture set.
+    /// Mock mode: every addable Provider routes to the deterministic mock
+    /// adapter, and the Accounts come from the same fixture set. Legacy
+    /// SiliconFlow fixtures stay in the list to exercise the unsupported state.
     static func mock(now: Date) -> BalanceDataSource {
         let fixtures = MockFixtures.standard(now: now)
-        let mockProvider = MockBalanceProvider(fixtures: fixtures)
-        let registry = ProviderRegistry(
-            adapters: Dictionary(
-                uniqueKeysWithValues: Provider.allCases.map { ($0, mockProvider) }
-            )
+        let quotaFixtures = MockFixtures.quotaFixtures(now: now)
+        let mockProvider = BalanceProviderAdapter(
+            provider: MockBalanceProvider(fixtures: fixtures)
         )
+        var adapters: [ProviderAdapterKey: any AccountProvider] = [:]
+        for provider in Provider.addableCases {
+            adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
+        }
+        adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
+            MockQuotaProvider(fixtures: quotaFixtures)
         return BalanceDataSource(
-            accounts: fixtures.map(\.account),
-            provider: registry
+            accounts: fixtures.map(\.account) + quotaFixtures.map(\.account),
+            provider: ProviderRegistry(adapters: adapters)
         )
     }
 }

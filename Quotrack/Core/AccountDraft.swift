@@ -8,17 +8,23 @@ struct AccountDraft: Equatable, Sendable {
     let region: Region?
     let label: String
     let credential: String
+    let kind: AccountKind
+    let currency: Currency?
 
     init(
         provider: Provider,
         region: Region? = nil,
         label: String,
-        credential: String
+        credential: String,
+        kind: AccountKind = .balance,
+        currency: Currency? = nil
     ) {
         self.provider = provider
         self.region = region
         self.label = label
         self.credential = credential
+        self.kind = kind
+        self.currency = currency
     }
 
     /// The Region an Account should persist. Region-capable Providers default

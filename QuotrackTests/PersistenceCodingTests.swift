@@ -25,6 +25,163 @@ struct PersistenceCodingTests {
     }
 
     @Test
+    func legacyAccountJSONMigratesToBalanceKindAndWarningThreshold() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuotrackAccountMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let accountID = UUID()
+        let legacyJSON = """
+        [{"id":"\(accountID.uuidString)","provider":"deepSeek","label":"个人账户","lowBalanceThreshold":10.5}]
+        """
+        try Data(legacyJSON.utf8).write(
+            to: directory.appendingPathComponent("accounts.json")
+        )
+
+        let accounts = FileSnapshotStore(directoryURL: directory).loadAccounts()
+
+        let account = try #require(accounts.first)
+        #expect(account.id == accountID)
+        #expect(account.kind == .balance)
+        #expect(account.warningThreshold == Decimal(string: "10.5"))
+        #expect(account.criticalThreshold == nil)
+        #expect(account.warningThreshold == Decimal(string: "10.5"))
+    }
+
+    @Test
+    func v1AccountsAndSnapshotsMigrateTogether() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuotrackV1Migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data(LegacyAccountFixtures.mixedAccountsJSON.utf8).write(
+            to: directory.appendingPathComponent("accounts.json")
+        )
+        try Data(LegacyAccountFixtures.snapshotsJSON.utf8).write(
+            to: directory.appendingPathComponent("snapshots.json")
+        )
+
+        let store = FileSnapshotStore(directoryURL: directory)
+        let accounts = store.loadAccounts()
+
+        #expect(accounts.count == 2)
+        let deepSeek = try #require(accounts.first { $0.provider == .deepSeek })
+        #expect(deepSeek.id == LegacyAccountFixtures.deepSeekAccountID)
+        #expect(deepSeek.kind == .balance)
+        #expect(deepSeek.warningThreshold == Decimal(string: "10.5"))
+        #expect(deepSeek.criticalThreshold == nil)
+
+        let siliconFlow = try #require(accounts.first { $0.provider == .siliconFlow })
+        #expect(siliconFlow.id == LegacyAccountFixtures.siliconFlowAccountID)
+        #expect(siliconFlow.kind == .balance)
+        #expect(siliconFlow.warningThreshold == Decimal(string: "10.5"))
+        #expect(!siliconFlow.provider.isSupported)
+
+        let snapshots = store.loadSnapshots()
+        #expect(snapshots.count == 2)
+        #expect(snapshots.values.allSatisfy { $0.balanceSnapshot != nil })
+        let deepSeekSnapshot = try #require(
+            snapshots[LegacyAccountFixtures.deepSeekAccountID]?.balanceSnapshot
+        )
+        #expect(
+            deepSeekSnapshot.balance
+                == Balance(amount: Decimal(string: "12.25")!, currency: .cny)
+        )
+        #expect(deepSeekSnapshot.fetchedAt == LegacyAccountFixtures.legacySnapshotFetchedAt)
+        #expect(
+            snapshots[LegacyAccountFixtures.siliconFlowAccountID]?
+                .balanceSnapshot?.balance
+                == LegacyAccountFixtures.siliconFlowBalance
+        )
+    }
+
+    @Test
+    func accountKindAndThresholdsRoundTripThroughJSON() throws {
+        let account = Account(
+            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+            provider: .moonshot,
+            region: .domestic,
+            kind: .subscription,
+            currency: .cny,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+
+        let data = try JSONEncoder().encode([account])
+        let decoded = try JSONDecoder().decode([Account].self, from: data)
+
+        #expect(decoded == [account])
+        #expect(decoded.first?.kind == .subscription)
+        #expect(decoded.first?.currency == .cny)
+        #expect(decoded.first?.warningThreshold == 20)
+        #expect(decoded.first?.criticalThreshold == 10)
+    }
+
+    @Test
+    func invalidPersistedThresholdsDecodeAsUnset() throws {
+        let subscription = Account(
+            id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 150
+        )
+        let balance = Account(
+            id: UUID(uuidString: "66666666-6666-6666-6666-666666666666")!,
+            provider: .deepSeek,
+            label: "个人账户",
+            warningThreshold: 5,
+            criticalThreshold: 10
+        )
+
+        let data = try JSONEncoder().encode([subscription, balance])
+        let decoded = try JSONDecoder().decode([Account].self, from: data)
+
+        #expect(decoded.count == 2)
+        #expect(decoded[0].warningThreshold == nil)
+        #expect(decoded[0].criticalThreshold == nil)
+        #expect(decoded[1].warningThreshold == nil)
+        #expect(decoded[1].criticalThreshold == nil)
+    }
+
+    @Test
+    func quotaSnapshotRoundTripsAndDerivesUsage() throws {
+        let resetAt = Date(timeIntervalSince1970: 1_800_000_300)
+        let snapshot = QuotaSnapshot(
+            accountID: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+            limit: 100,
+            remaining: 60,
+            resetAt: resetAt,
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            packages: [
+                QuotaPackage(
+                    name: "Kimi Code",
+                    limit: 100,
+                    remaining: 60,
+                    expiresAt: resetAt
+                ),
+            ],
+            windows: [
+                QuotaWindow(
+                    name: "5 小时窗口",
+                    limit: 100,
+                    remaining: 85,
+                    resetAt: resetAt
+                ),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(QuotaSnapshot.self, from: data)
+
+        #expect(decoded == snapshot)
+        #expect(decoded.used == 40)
+        #expect(decoded.usedRatio == Decimal(string: "0.4"))
+        #expect(decoded.windows?.first?.name == "5 小时窗口")
+    }
+
+    @Test
     func balanceSnapshotBreakdownRoundTripsThroughJSON() throws {
         let snapshot = BalanceSnapshot(
             accountID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,

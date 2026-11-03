@@ -24,6 +24,83 @@ struct AccountManagerTests {
     }
 
     @Test
+    func newAccountsDefaultToBalanceKind() throws {
+        let manager = AccountManager(
+            store: InMemorySnapshotStore(),
+            credentialStore: InMemoryCredentialStore()
+        )
+
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        #expect(account.kind == .balance)
+        #expect(manager.accounts.first?.kind == .balance)
+    }
+
+    @Test
+    func aNewSubscriptionAccountDefaultsToATenPercentWarning() throws {
+        let manager = AccountManager(
+            store: InMemorySnapshotStore(),
+            credentialStore: InMemoryCredentialStore()
+        )
+        let account = try manager.addAccount(
+            AccountDraft(
+                provider: .moonshot,
+                label: "Kimi Code",
+                credential: "sk-kimi",
+                kind: .subscription
+            )
+        )
+
+        #expect(account.warningThreshold == 10)
+        #expect(account.criticalThreshold == nil)
+    }
+
+    @Test
+    func addingASubscriptionAccountKeepsItsKind() throws {
+        let store = InMemorySnapshotStore()
+        let manager = AccountManager(
+            store: store,
+            credentialStore: InMemoryCredentialStore()
+        )
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+
+        let account = try manager.addAccount(draft)
+
+        #expect(account.kind == .subscription)
+        #expect(store.loadAccounts() == [account])
+    }
+
+    @Test
+    func addingAProviderKindPairTheProviderDoesNotSupportIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let draft = AccountDraft(
+            provider: .deepSeek,
+            label: "DeepSeek 订阅",
+            credential: "sk-deepseek",
+            kind: .subscription
+        )
+
+        #expect(throws: AccountManagerError.unsupportedAccountKind) {
+            try manager.addAccount(draft)
+        }
+
+        #expect(manager.accounts.isEmpty)
+        #expect(store.loadAccounts().isEmpty)
+        #expect(credentials.saveCallCount == 0)
+    }
+
+    @Test
     func addingAnAccountStoresTheCredentialOnlyInTheCredentialStore() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -71,9 +148,9 @@ struct AccountManagerTests {
         )
 
         let account = try manager.addAccount(
-            provider: .siliconFlow,
-            label: "SiliconFlow",
-            credential: "sk-siliconflow"
+            provider: .moonshot,
+            label: "Kimi 国内",
+            credential: "sk-moonshot"
         )
 
         #expect(account.region == .domestic)
@@ -145,7 +222,7 @@ struct AccountManagerTests {
         #expect(store.loadAccounts() == [account])
         let storedCredential = try credentials.credential(for: account.id)
         #expect(storedCredential == "sk-new")
-        #expect(store.loadSnapshots() == [account.id: snapshot])
+        #expect(store.loadBalanceSnapshots() == [account.id: snapshot])
     }
 
     @Test
@@ -187,7 +264,7 @@ struct AccountManagerTests {
         #expect(deletedCredential == nil)
         let keptCredential = try credentials.credential(for: kept.id)
         #expect(keptCredential == "sk-keep")
-        #expect(store.loadSnapshots() == [kept.id: keptSnapshot])
+        #expect(store.loadBalanceSnapshots() == [kept.id: keptSnapshot])
     }
 
     @Test
@@ -278,7 +355,7 @@ struct AccountManagerTests {
             credentialStore: credentials
         )
         let account = try firstLaunch.addAccount(
-            provider: .siliconFlow,
+            provider: .moonshot,
             region: .international,
             label: "公司账户",
             credential: "sk-persisted"

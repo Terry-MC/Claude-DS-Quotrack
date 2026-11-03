@@ -21,16 +21,33 @@ final class AccountManager {
     /// identity in the SnapshotStore. A failed metadata write rolls back the
     /// credential so no orphan secret is left behind.
     @discardableResult
-    func addAccount(_ draft: AccountDraft) throws -> Account {
+    func addAccount(
+        _ draft: AccountDraft,
+        thresholds: AccountThresholds? = nil
+    ) throws -> Account {
         let trimmedLabel = try validatedLabel(draft.label)
         guard !draft.credential.isEmpty else {
             throw AccountManagerError.missingCredential
+        }
+        guard draft.provider.supportedKinds.contains(draft.kind) else {
+            throw AccountManagerError.unsupportedAccountKind
+        }
+        let resolvedThresholds = thresholds
+            ?? AccountThresholds.defaults(for: draft.kind)
+        do {
+            try resolvedThresholds.validate(for: draft.kind)
+        } catch is AccountThresholdError {
+            throw AccountManagerError.invalidThreshold
         }
         let account = Account(
             id: UUID(),
             provider: draft.provider,
             region: draft.normalizedRegion,
-            label: trimmedLabel
+            kind: draft.kind,
+            currency: draft.currency,
+            label: trimmedLabel,
+            warningThreshold: resolvedThresholds.warning,
+            criticalThreshold: resolvedThresholds.critical
         )
         try credentialStore.save(draft.credential, for: account.id)
         do {
@@ -53,21 +70,23 @@ final class AccountManager {
         try replaceAccount(at: index, with: accounts[index].with(label: trimmedLabel))
     }
 
-    /// Enables or clears the Account's low-Balance warning. A threshold must
-    /// be greater than zero; `nil` turns the warning off.
-    func updateLowBalanceThreshold(
+    /// Replaces both health thresholds on an Account while preserving its
+    /// identity, Provider, Region, label, and credential.
+    func updateThresholds(
         accountID: Account.ID,
-        threshold: Decimal?
+        thresholds: AccountThresholds
     ) throws {
         guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
             throw AccountManagerError.accountNotFound
         }
-        if let threshold, threshold <= 0 {
+        do {
+            try thresholds.validate(for: accounts[index].kind)
+        } catch is AccountThresholdError {
             throw AccountManagerError.invalidThreshold
         }
         try replaceAccount(
             at: index,
-            with: accounts[index].with(lowBalanceThreshold: threshold)
+            with: accounts[index].with(thresholds: thresholds)
         )
     }
 
@@ -117,13 +136,15 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
     case missingLabel
     case missingCredential
     case invalidThreshold
+    case unsupportedAccountKind
 
     var errorDescription: String? {
         switch self {
         case .accountNotFound: "账户不存在。"
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
-        case .invalidThreshold: "低余额阈值必须大于 0。"
+        case .invalidThreshold: UIStrings.invalidThreshold
+        case .unsupportedAccountKind: "该厂商不支持此账户类型。"
         }
     }
 }

@@ -5,7 +5,7 @@ struct MenuBarStatusPresentationTests {
     func normalStateShowsTheNormalIconAndDescription() {
         let viewState = MenuBarStatusPresentation.viewState(for: .normal)
 
-        #expect(viewState.symbolName == "dollarsign.circle.fill")
+        #expect(viewState.symbolName == "chart.bar.fill")
         #expect(viewState.accessibilityDescription == UIStrings.menuBarNormalDescription)
     }
 
@@ -15,6 +15,14 @@ struct MenuBarStatusPresentationTests {
 
         #expect(viewState.symbolName == "exclamationmark.triangle.fill")
         #expect(viewState.accessibilityDescription == UIStrings.menuBarWarningDescription)
+    }
+
+    @Test
+    func criticalStateShowsACriticalIconAndDescription() {
+        let viewState = MenuBarStatusPresentation.viewState(for: .critical)
+
+        #expect(viewState.symbolName == "exclamationmark.circle.fill")
+        #expect(viewState.accessibilityDescription == UIStrings.menuBarCriticalDescription)
     }
 
     @Test
@@ -30,6 +38,7 @@ struct MenuBarStatusPresentationTests {
         let viewStates = [
             MenuBarStatusPresentation.viewState(for: .normal),
             MenuBarStatusPresentation.viewState(for: .warning),
+            MenuBarStatusPresentation.viewState(for: .critical),
             MenuBarStatusPresentation.viewState(for: .error),
         ]
 

@@ -12,11 +12,20 @@ struct AggregateStateTests {
     @Test
     func allFreshBalancesAboveThresholdAreNormal() {
         let rows = [
-            makeRow(status: .fresh, threshold: "10", amount: "10.00"),
+            makeRow(status: .fresh, threshold: "10", amount: "10.01"),
             makeRow(status: .fresh, amount: "0.01"),
         ]
 
         #expect(AggregateBalanceState.derive(from: rows) == .normal)
+    }
+
+    @Test
+    func aFreshBalanceAtTheWarningLineIsWarning() {
+        let rows = [
+            makeRow(status: .fresh, threshold: "10", amount: "10"),
+        ]
+
+        #expect(AggregateBalanceState.derive(from: rows) == .warning)
     }
 
     @Test
@@ -27,6 +36,74 @@ struct AggregateStateTests {
         ]
 
         #expect(AggregateBalanceState.derive(from: rows) == .warning)
+    }
+
+    @Test
+    func anyFreshBalanceAtTheCriticalLineIsCritical() {
+        let rows = [
+            makeRow(
+                status: .fresh,
+                threshold: "10",
+                critical: "5",
+                amount: "5"
+            ),
+        ]
+
+        #expect(AggregateBalanceState.derive(from: rows) == .critical)
+    }
+
+    @Test
+    func aCriticalQuotaRaisesTheAggregateToCritical() {
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: 5,
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .quota(quota),
+            status: .fresh
+        )
+
+        #expect(AggregateBalanceState.derive(from: [row]) == .critical)
+    }
+
+    @Test
+    func aStaleSnapshotKeepsItsCriticalHealthInTheAggregate() {
+        let rows = [
+            makeRow(
+                status: .stale,
+                threshold: "10",
+                critical: "5",
+                amount: "5"
+            ),
+        ]
+
+        #expect(AggregateBalanceState.derive(from: rows) == .critical)
+    }
+
+    @Test
+    func errorOutranksCritical() {
+        let rows = [
+            makeRow(
+                status: .fresh,
+                threshold: "10",
+                critical: "5",
+                amount: "5"
+            ),
+            makeRow(status: .error, error: .network),
+        ]
+
+        #expect(AggregateBalanceState.derive(from: rows) == .error)
     }
 
     @Test
@@ -90,7 +167,7 @@ struct MonitorAggregateStateTests {
             id: UUID(),
             provider: .deepSeek,
             label: "个人账户",
-            lowBalanceThreshold: Decimal(string: "10")
+            warningThreshold: Decimal(string: "10")
         )
         let provider = RecordingBalanceProvider { account in
             BalanceSnapshot(
@@ -118,7 +195,7 @@ struct MonitorAggregateStateTests {
             id: UUID(),
             provider: .deepSeek,
             label: "个人账户",
-            lowBalanceThreshold: Decimal(string: "10")
+            warningThreshold: Decimal(string: "10")
         )
         let provider = RecordingBalanceProvider { account in
             BalanceSnapshot(
@@ -222,6 +299,7 @@ struct MonitorAggregateStateTests {
 private func makeRow(
     status: SnapshotStatus?,
     threshold: String? = nil,
+    critical: String? = nil,
     amount: String = "10",
     isAvailable: Bool = true,
     error: BalanceProviderError? = nil
@@ -230,14 +308,17 @@ private func makeRow(
         id: UUID(),
         provider: .deepSeek,
         label: "账户",
-        lowBalanceThreshold: threshold.flatMap { Decimal(string: $0) }
+        warningThreshold: threshold.flatMap { Decimal(string: $0) },
+        criticalThreshold: critical.flatMap { Decimal(string: $0) }
     )
-    let snapshot = status.map { status in
-        BalanceSnapshot(
-            accountID: account.id,
-            balance: Balance(amount: Decimal(string: amount)!, currency: .cny),
-            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            isAvailable: isAvailable
+    let snapshot = status.map { _ in
+        AccountSnapshot.balance(
+            BalanceSnapshot(
+                accountID: account.id,
+                balance: Balance(amount: Decimal(string: amount)!, currency: .cny),
+                fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                isAvailable: isAvailable
+            )
         )
     }
     return BalanceRow(account: account, snapshot: snapshot, status: status, error: error)

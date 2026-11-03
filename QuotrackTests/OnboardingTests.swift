@@ -121,6 +121,72 @@ struct OnboardingTests {
     }
 
     @Test
+    func onboardingSavesAKimiCodeSubscriptionAccount() async throws {
+        let quota = QuotaSnapshot(
+            accountID: UUID(),
+            limit: 100,
+            remaining: 60,
+            fetchedAt: Date()
+        )
+        let context = makeContext(
+            accountResult: .success(AccountSnapshot.quota(quota))
+        )
+        context.model.selectedProvider = .moonshot
+        context.model.advance()
+        context.model.advance()
+        context.model.selectedKind = .subscription
+        context.model.warningThresholdText = "10"
+        context.model.criticalThresholdText = "5"
+        context.model.label = "Kimi Code"
+        context.model.credential = "sk-kimi"
+
+        await context.model.submit()
+
+        let account = try #require(context.model.completedAccount)
+        #expect(account.kind == .subscription)
+        #expect(account.warningThreshold == 10)
+        #expect(account.criticalThreshold == 5)
+        #expect(account.currency == nil)
+        #expect(context.manager.accounts == [account])
+    }
+
+    @Test
+    func onboardingSavesTheEnteredThresholds() async throws {
+        let context = makeContext()
+        context.model.selectedProvider = .deepSeek
+        context.model.advance()
+        context.model.label = "个人账户"
+        context.model.credential = "sk-deepseek"
+        context.model.warningThresholdText = "50"
+        context.model.criticalThresholdText = "20"
+
+        await context.model.submit()
+
+        let account = try #require(context.model.completedAccount)
+        #expect(account.warningThreshold == Decimal(string: "50"))
+        #expect(account.criticalThreshold == Decimal(string: "20"))
+        #expect(account.currency == .cny)
+        #expect(context.manager.accounts == [account])
+    }
+
+    @Test
+    func invalidOnboardingThresholdsStayOnDetailsAndDoNotTestTheCredential() async throws {
+        let context = makeContext()
+        context.model.selectedProvider = .deepSeek
+        context.model.advance()
+        context.model.label = "个人账户"
+        context.model.credential = "sk-deepseek"
+        context.model.warningThresholdText = "0"
+
+        await context.model.submit()
+
+        #expect(context.model.step == .details)
+        #expect(context.model.errorMessage == UIStrings.invalidThreshold)
+        #expect(context.tester.requests.isEmpty)
+        #expect(context.manager.accounts.isEmpty)
+    }
+
+    @Test
     func aSuccessfulConnectionTestSavesTheAccountAndCompletesOnboarding() async throws {
         let context = makeContext()
         context.model.selectedProvider = .moonshot
@@ -138,7 +204,7 @@ struct OnboardingTests {
         #expect(account.provider == .moonshot)
         #expect(account.region == .international)
         #expect(account.label == "Kimi 国际")
-        #expect(account.lowBalanceThreshold == nil)
+        #expect(account.warningThreshold == nil)
         #expect(context.manager.accounts == [account])
         #expect(context.store.loadAccounts() == [account])
         let storedCredential = try context.credentials.credential(for: account.id)
@@ -182,12 +248,10 @@ struct OnboardingTests {
     @Test
     func accountDetailsAreTrimmedBeforeSaving() async throws {
         let context = makeContext()
-        context.model.selectedProvider = .siliconFlow
-        context.model.advance()
-        context.model.selectedRegion = .domestic
+        context.model.selectedProvider = .deepSeek
         context.model.advance()
         context.model.label = "  国内账户  "
-        context.model.credential = "sk-silicon"
+        context.model.credential = "sk-deepseek"
 
         await context.model.submit()
 
@@ -212,7 +276,25 @@ private func makeContext(
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
-    let tester = RecordingConnectionTester(result: testerResult)
+    let tester = RecordingConnectionTester(balanceResult: testerResult)
+    let model = OnboardingModel(accountManager: manager, connectionTester: tester)
+    return OnboardingContext(
+        model: model,
+        manager: manager,
+        store: store,
+        credentials: credentials,
+        tester: tester
+    )
+}
+
+@MainActor
+private func makeContext(
+    accountResult: Result<AccountSnapshot, BalanceProviderError>
+) -> OnboardingContext {
+    let store = InMemorySnapshotStore()
+    let credentials = InMemoryCredentialStore()
+    let manager = AccountManager(store: store, credentialStore: credentials)
+    let tester = RecordingConnectionTester(result: accountResult)
     let model = OnboardingModel(accountManager: manager, connectionTester: tester)
     return OnboardingContext(
         model: model,
@@ -230,7 +312,7 @@ private func makeContext(
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
-    let tester = RecordingConnectionTester(results: testerResults)
+    let tester = RecordingConnectionTester(balanceResults: testerResults)
     let model = OnboardingModel(accountManager: manager, connectionTester: tester)
     return OnboardingContext(
         model: model,

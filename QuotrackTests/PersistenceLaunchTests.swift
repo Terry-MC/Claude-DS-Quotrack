@@ -25,7 +25,7 @@ struct PersistenceLaunchTests {
 
         #expect(provider.startedCount == 0)
         let row = try #require(monitor.rows.first)
-        #expect(row.snapshot == snapshot)
+        #expect(row.balanceSnapshot == snapshot)
         #expect(row.status == .fresh)
         #expect(row.error == nil)
     }
@@ -51,7 +51,7 @@ struct PersistenceLaunchTests {
         )
 
         let row = try #require(monitor.rows.first)
-        #expect(row.snapshot == snapshot)
+        #expect(row.balanceSnapshot == snapshot)
         #expect(row.status == .stale)
         #expect(row.error == nil)
     }
@@ -94,7 +94,7 @@ struct PersistenceLaunchTests {
 
         await monitor.refresh()
 
-        #expect(store.loadSnapshots() == [account.id: makeSnapshot(for: account)])
+        #expect(store.loadBalanceSnapshots() == [account.id: makeSnapshot(for: account)])
     }
 
     @Test
@@ -120,8 +120,8 @@ struct PersistenceLaunchTests {
         let row = try #require(monitor.rows.first)
         #expect(row.status == .error)
         #expect(row.error == .network)
-        #expect(row.snapshot == persisted)
-        #expect(store.loadSnapshots() == [account.id: persisted])
+        #expect(row.balanceSnapshot == persisted)
+        #expect(store.loadBalanceSnapshots() == [account.id: persisted])
     }
 
     @Test
@@ -154,7 +154,7 @@ struct PersistenceLaunchTests {
         #expect(relaunchProvider.startedCount == 0)
         let row = try #require(relaunched.rows.first)
         #expect(row.account == account)
-        #expect(row.snapshot == makeSnapshot(for: account))
+        #expect(row.balanceSnapshot == makeSnapshot(for: account))
         #expect(row.status == .fresh)
     }
 
@@ -182,7 +182,8 @@ struct PersistenceLaunchTests {
 
         #expect(dataSource.accounts == [account])
         #expect(monitor.rows.map(\.account) == [account])
-        #expect(monitor.rows.first?.snapshot == snapshot)
+        #expect(monitor.rows.first?.balanceSnapshot == snapshot)
+        #expect(monitor.rows.first?.status == .unsupported)
     }
 
     @Test
@@ -208,14 +209,14 @@ struct PersistenceLaunchTests {
         )
         await monitor.switchDataSource(.mock(now: now), store: nil)
 
-        #expect(mockSource.accounts.count == 12)
+        #expect(mockSource.accounts.count == 19)
         #expect(!mockSource.accounts.contains { $0.id == realAccount.id })
-        #expect(store.loadSnapshots() == [realAccount.id: persisted])
+        #expect(store.loadBalanceSnapshots() == [realAccount.id: persisted])
     }
 
     @Test
     func persistedSnapshotForADifferentAccountIsIgnored() throws {
-        let account = Account(id: UUID(), provider: .siliconFlow, label: "SiliconFlow 国内")
+        let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
         let otherAccount = Account(id: UUID(), provider: .openRouter, label: "OpenRouter")
         let otherSnapshot = BalanceSnapshot(
             accountID: otherAccount.id,

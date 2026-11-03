@@ -12,7 +12,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now.addingTimeInterval(-300),
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -20,7 +20,161 @@ struct BalanceRowPresentationTests {
         #expect(viewState.label == "个人账户")
         #expect(viewState.balanceText == "¥42.50")
         #expect(viewState.updatedText == "5分钟前")
-        #expect(viewState.statusText == "正常")
+        #expect(viewState.statusText == UIStrings.statusFresh)
+    }
+
+    @Test
+    func rowViewStateShowsHealthAndThresholdText() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户",
+            warningThreshold: 10,
+            criticalThreshold: 5
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .cny),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.health == .warning)
+        #expect(viewState.healthText == UIStrings.healthWarning)
+        #expect(viewState.thresholdText == "预警 ¥10 · 紧急 ¥5")
+        #expect(viewState.tone == .warning)
+        #expect(viewState.showsHealth)
+    }
+
+    @Test
+    func rowViewStateShowsUnsetWithoutThresholds() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .cny),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.health == .unset)
+        #expect(viewState.healthText == UIStrings.healthUnset)
+        #expect(viewState.thresholdText == UIStrings.thresholdUnset)
+        #expect(viewState.tone == .unset)
+        #expect(!viewState.showsHealth)
+    }
+
+    @Test
+    func quotaRowShowsRemainingUsedResetAndExperimental() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let resetAt = Date(timeIntervalSince1970: 1_800_000_300)
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: 40,
+            resetAt: resetAt,
+            fetchedAt: now,
+            windows: [
+                QuotaWindow(
+                    name: "5 小时窗口",
+                    limit: 100,
+                    remaining: 80,
+                    resetAt: resetAt
+                ),
+            ]
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .quota(quota),
+            status: .fresh
+        )
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.isQuota)
+        #expect(viewState.isExperimental)
+        #expect(viewState.quotaRemainingText == "剩余 40 / 100")
+        #expect(viewState.quotaUsedText == "已用 60%")
+        #expect(viewState.quotaResetText?.hasPrefix("额度重置") == true)
+        #expect(viewState.quotaSecondaryText == "5 小时窗口：剩余 80%")
+        #expect(abs((viewState.quotaRemainingRatio ?? 0) - 0.4) < 0.0001)
+        #expect(viewState.health == .normal)
+        #expect(viewState.thresholdText == "预警 20% · 紧急 10%")
+        #expect(viewState.showsHealth)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+        #expect(detail.quotaLines.contains("剩余 40 / 100"))
+        #expect(detail.quotaLines.contains("已用 60%"))
+        #expect(detail.quotaLines.contains { $0.hasPrefix("额度重置") })
+        #expect(detail.quotaLines.contains("5 小时窗口：剩余 80%"))
+        #expect(detail.fetchedAtText != nil)
+    }
+
+    @Test
+    func detailWarnsWhenThresholdCurrencyDiffersFromTheSnapshot() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户",
+            warningThreshold: 10
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .usd),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(detail.currencyWarningText != nil)
+        #expect(detail.healthText == UIStrings.healthUnset)
+    }
+
+    @Test
+    func detailDoesNotWarnAboutCurrencyWithoutThresholds() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .usd),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(detail.currencyWarningText == nil)
     }
 
     @Test
@@ -33,7 +187,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now.addingTimeInterval(-900),
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .stale)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .stale)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -56,7 +210,7 @@ struct BalanceRowPresentationTests {
                 BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100")!),
             ]
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -78,7 +232,7 @@ struct BalanceRowPresentationTests {
                 BalanceBreakdownItem(kind: .spend, amount: Decimal(string: "25.75")!),
             ]
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -95,7 +249,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let rowState = BalanceRowPresentation.viewState(for: row, now: now)
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
@@ -107,14 +261,14 @@ struct BalanceRowPresentationTests {
     @Test
     func detailViewStateShowsTheExactFetchTimeInTheGivenTimeZone() {
         let fetchedAt = Date(timeIntervalSince1970: 1_800_000_000)
-        let account = Account(id: UUID(), provider: .siliconFlow, label: "国内账户")
+        let account = Account(id: UUID(), provider: .openRouter, label: "管理账户")
         let snapshot = BalanceSnapshot(
             accountID: account.id,
             balance: Balance(amount: Decimal(string: "15.00")!, currency: .cny),
             fetchedAt: fetchedAt,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -132,7 +286,7 @@ struct BalanceRowPresentationTests {
         (BalanceProviderError.permission, Provider.openRouter, "权限不足，OpenRouter 需要管理密钥。"),
         (BalanceProviderError.network, Provider.moonshot, "网络错误，请检查网络连接。"),
         (BalanceProviderError.rateLimit, Provider.deepSeek, "请求过于频繁，请稍后重试。"),
-        (BalanceProviderError.malformedResponse, Provider.siliconFlow, "响应格式异常，无法解析。"),
+        (BalanceProviderError.malformedResponse, Provider.deepSeek, "响应格式异常，无法解析。"),
         (BalanceProviderError.unknown, Provider.openRouter, "未知错误，请稍后重试。"),
     ])
     func detailViewStateMapsTypedErrorsToChineseDetail(
@@ -163,7 +317,7 @@ struct BalanceRowPresentationTests {
         )
         let row = BalanceRow(
             account: account,
-            snapshot: snapshot,
+            snapshot: .balance(snapshot),
             status: .error,
             error: .network
         )
@@ -189,6 +343,41 @@ struct BalanceRowPresentationTests {
         #expect(detail.errorText == nil)
     }
 
+    @Test
+    func aLegacyUnsupportedRowHidesBalanceAndShowsTheUnsupportedState() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .siliconFlow,
+            region: .domestic,
+            label: "SiliconFlow 国内"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: Decimal(string: "15.00")!, currency: .cny),
+            fetchedAt: now.addingTimeInterval(-120),
+            isAvailable: true
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .balance(snapshot),
+            status: .unsupported
+        )
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(viewState.status == .unsupported)
+        #expect(viewState.statusText == UIStrings.unsupportedProviderState)
+        #expect(viewState.balanceText == "—")
+        #expect(viewState.updatedText == "—")
+        #expect(viewState.tone == .unsupported)
+        #expect(detail.balanceText == nil)
+        #expect(detail.fetchedAtText == nil)
+        #expect(detail.breakdown.isEmpty)
+        #expect(detail.errorText == nil)
+    }
+
     @Test(arguments: [
         (
             BalanceRowTone.normal,
@@ -197,10 +386,22 @@ struct BalanceRowPresentationTests {
             AggregateBalanceState.normal
         ),
         (
-            BalanceRowTone.lowBalance,
+            BalanceRowTone.warning,
             .warning,
             .warning,
             .warning
+        ),
+        (
+            BalanceRowTone.critical,
+            .error,
+            .error,
+            .critical
+        ),
+        (
+            BalanceRowTone.unset,
+            .primary,
+            .primary,
+            .normal
         ),
         (
             BalanceRowTone.stale,
@@ -224,6 +425,12 @@ struct BalanceRowPresentationTests {
             BalanceRowTone.pending,
             .pending,
             .primary,
+            .normal
+        ),
+        (
+            BalanceRowTone.unsupported,
+            .muted,
+            .muted,
             .normal
         ),
     ])

@@ -4,7 +4,7 @@ import Testing
 @MainActor
 struct AccountThresholdTests {
     @Test
-    func newAccountsHaveLowBalanceThresholdDisabledByDefault() throws {
+    func newAccountsHaveThresholdsDisabledByDefault() throws {
         let store = InMemorySnapshotStore()
         let manager = makeManager(store: store)
 
@@ -14,12 +14,191 @@ struct AccountThresholdTests {
             credential: "sk-deepseek"
         )
 
-        #expect(account.lowBalanceThreshold == nil)
-        #expect(store.loadAccounts().first?.lowBalanceThreshold == nil)
+        #expect(account.warningThreshold == nil)
+        #expect(account.criticalThreshold == nil)
+        #expect(store.loadAccounts().first?.warningThreshold == nil)
     }
 
     @Test
-    func aLowBalanceThresholdCanBeEnabledAndPersists() throws {
+    func quotaThresholdsDefaultToTenPercentWarningAndNoCritical() {
+        let quotaDefaults = AccountThresholds.defaults(for: .subscription)
+        #expect(quotaDefaults.warning == 10)
+        #expect(quotaDefaults.critical == nil)
+        #expect(AccountThresholds.defaults(for: .balance) == AccountThresholds())
+    }
+
+    @Test
+    func thresholdValidationUsesTheAccountKindRange() throws {
+        try AccountThresholds(warning: 10).validate(for: .balance)
+        try AccountThresholds(warning: 10, critical: 5).validate(for: .subscription)
+        try AccountThresholds(warning: 0).validate(for: .subscription)
+
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(warning: 0).validate(for: .balance)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(critical: -1).validate(for: .balance)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(warning: 101).validate(for: .subscription)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(critical: -1).validate(for: .subscription)
+        }
+        #expect(throws: AccountThresholdError.criticalNotBelowWarning) {
+            try AccountThresholds(warning: 10, critical: 10).validate(for: .subscription)
+        }
+    }
+
+    @Test
+    func theManagerValidatesThresholdsAgainstTheAccountKind() throws {
+        let manager = makeManager(store: InMemorySnapshotStore())
+        let subscription = try manager.addAccount(
+            AccountDraft(
+                provider: .moonshot,
+                label: "Kimi Code",
+                credential: "sk-kimi",
+                kind: .subscription
+            )
+        )
+
+        try manager.updateThresholds(
+            accountID: subscription.id,
+            thresholds: AccountThresholds(warning: 0)
+        )
+        #expect(manager.accounts.first?.warningThreshold == 0)
+
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: subscription.id,
+                thresholds: AccountThresholds(warning: 101)
+            )
+        }
+
+        let balance = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: balance.id,
+                thresholds: AccountThresholds(warning: 0)
+            )
+        }
+    }
+
+    @Test
+    func warningAndCriticalThresholdsCanBeSetAndPersist() throws {
+        let store = InMemorySnapshotStore()
+        let manager = makeManager(store: store)
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        try manager.updateThresholds(
+            accountID: account.id,
+            thresholds: AccountThresholds(
+                warning: Decimal(string: "50"),
+                critical: Decimal(string: "20")
+            )
+        )
+
+        let updated = try #require(manager.accounts.first)
+        #expect(updated.id == account.id)
+        #expect(updated.kind == .balance)
+        #expect(updated.warningThreshold == Decimal(string: "50"))
+        #expect(updated.criticalThreshold == Decimal(string: "20"))
+        #expect(store.loadAccounts() == [updated])
+    }
+
+    @Test
+    func editingTheLabelPreservesKindAndBothThresholds() throws {
+        let store = InMemorySnapshotStore()
+        let manager = makeManager(store: store)
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+        let account = try manager.addAccount(draft)
+        try manager.updateThresholds(
+            accountID: account.id,
+            thresholds: AccountThresholds(warning: 20, critical: 10)
+        )
+
+        try manager.updateLabel(accountID: account.id, label: "Kimi Code 2")
+
+        let updated = try #require(manager.accounts.first)
+        #expect(updated.kind == .subscription)
+        #expect(updated.warningThreshold == 20)
+        #expect(updated.criticalThreshold == 10)
+        #expect(store.loadAccounts() == [updated])
+    }
+
+    @Test
+    func nonPositiveThresholdsAreRejectedByTheTwoLevelPath() throws {
+        let store = InMemorySnapshotStore()
+        let manager = makeManager(store: store)
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(warning: 0)
+            )
+        }
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(critical: -1)
+            )
+        }
+
+        #expect(manager.accounts.first?.warningThreshold == nil)
+        #expect(manager.accounts.first?.criticalThreshold == nil)
+        #expect(store.loadAccounts().first?.warningThreshold == nil)
+        #expect(store.loadAccounts().first?.criticalThreshold == nil)
+    }
+
+    @Test
+    func aCriticalThresholdAtOrAboveTheWarningThresholdIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let manager = makeManager(store: store)
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(warning: 10, critical: 10)
+            )
+        }
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(warning: 10, critical: 20)
+            )
+        }
+
+        #expect(manager.accounts.first?.warningThreshold == nil)
+        #expect(manager.accounts.first?.criticalThreshold == nil)
+        #expect(store.loadAccounts().first?.warningThreshold == nil)
+        #expect(store.loadAccounts().first?.criticalThreshold == nil)
+    }
+
+    @Test
+    func aWarningThresholdCanBeEnabledAndPersists() throws {
         let store = InMemorySnapshotStore()
         let manager = makeManager(store: store)
         let account = try manager.addAccount(
@@ -28,55 +207,59 @@ struct AccountThresholdTests {
             credential: "sk-moonshot"
         )
 
-        try manager.updateLowBalanceThreshold(
+        try manager.updateThresholds(
             accountID: account.id,
-            threshold: Decimal(string: "10.50")
+            thresholds: AccountThresholds(warning: Decimal(string: "10.50"))
         )
 
         let updated = try #require(manager.accounts.first)
-        #expect(updated.lowBalanceThreshold == Decimal(string: "10.50"))
+        #expect(updated.warningThreshold == Decimal(string: "10.50"))
         #expect(updated.id == account.id)
         #expect(store.loadAccounts() == [updated])
     }
 
     @Test
-    func clearingTheThresholdTurnsTheWarningOff() throws {
+    func clearingTheThresholdsTurnsHealthOff() throws {
         let store = InMemorySnapshotStore()
         let manager = makeManager(store: store)
         let account = try manager.addAccount(
-            provider: .siliconFlow,
-            label: "SiliconFlow",
-            credential: "sk-siliconflow"
+            provider: .moonshot,
+            label: "Kimi",
+            credential: "sk-moonshot"
         )
-        try manager.updateLowBalanceThreshold(
+        try manager.updateThresholds(
             accountID: account.id,
-            threshold: Decimal(string: "5")
+            thresholds: AccountThresholds(warning: Decimal(string: "5"))
         )
 
-        try manager.updateLowBalanceThreshold(accountID: account.id, threshold: nil)
+        try manager.updateThresholds(
+            accountID: account.id,
+            thresholds: AccountThresholds()
+        )
 
-        #expect(manager.accounts.first?.lowBalanceThreshold == nil)
-        #expect(store.loadAccounts().first?.lowBalanceThreshold == nil)
+        #expect(manager.accounts.first?.warningThreshold == nil)
+        #expect(manager.accounts.first?.criticalThreshold == nil)
+        #expect(store.loadAccounts().first?.warningThreshold == nil)
     }
 
     @Test
-    func editingTheLabelPreservesTheLowBalanceThreshold() throws {
+    func editingTheLabelPreservesTheWarningThreshold() throws {
         let manager = makeManager(store: InMemorySnapshotStore())
         let account = try manager.addAccount(
             provider: .deepSeek,
             label: "旧标签",
             credential: "sk-deepseek"
         )
-        try manager.updateLowBalanceThreshold(
+        try manager.updateThresholds(
             accountID: account.id,
-            threshold: Decimal(string: "8")
+            thresholds: AccountThresholds(warning: Decimal(string: "8"))
         )
 
         try manager.updateLabel(accountID: account.id, label: "新标签")
 
         let updated = try #require(manager.accounts.first)
         #expect(updated.label == "新标签")
-        #expect(updated.lowBalanceThreshold == Decimal(string: "8"))
+        #expect(updated.warningThreshold == Decimal(string: "8"))
     }
 
     @Test
@@ -90,13 +273,19 @@ struct AccountThresholdTests {
         )
 
         #expect(throws: AccountManagerError.invalidThreshold) {
-            try manager.updateLowBalanceThreshold(accountID: account.id, threshold: 0)
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(warning: 0)
+            )
         }
         #expect(throws: AccountManagerError.invalidThreshold) {
-            try manager.updateLowBalanceThreshold(accountID: account.id, threshold: -1)
+            try manager.updateThresholds(
+                accountID: account.id,
+                thresholds: AccountThresholds(warning: -1)
+            )
         }
-        #expect(manager.accounts.first?.lowBalanceThreshold == nil)
-        #expect(store.loadAccounts().first?.lowBalanceThreshold == nil)
+        #expect(manager.accounts.first?.warningThreshold == nil)
+        #expect(store.loadAccounts().first?.warningThreshold == nil)
     }
 
     @Test
@@ -117,7 +306,7 @@ struct AccountThresholdTests {
 
         let account = try #require(accounts.first)
         #expect(account.id == accountID)
-        #expect(account.lowBalanceThreshold == nil)
+        #expect(account.warningThreshold == nil)
     }
 }
 

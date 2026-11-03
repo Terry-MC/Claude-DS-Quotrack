@@ -7,7 +7,8 @@ enum UIStrings {
 
     // Menu bar aggregate state
     static let menuBarNormalDescription = "Quotrack：一切正常"
-    static let menuBarWarningDescription = "Quotrack：有账户余额偏低或数据已过期"
+    static let menuBarWarningDescription = "Quotrack：有账户需要关注"
+    static let menuBarCriticalDescription = "Quotrack：有账户需要立即处理"
     static let menuBarErrorDescription = "Quotrack：有账户出错"
 
     // Breakdown labels
@@ -26,7 +27,68 @@ enum UIStrings {
     static let networkError = "网络错误，请检查网络连接。"
     static let rateLimitError = "请求过于频繁，请稍后重试。"
     static let malformedResponseError = "响应格式异常，无法解析。"
+    static let unsupportedAccountKindError = "该账户类型暂不支持。"
     static let unknownError = "未知错误，请稍后重试。"
+
+    // Health and thresholds
+    static let healthNormal = "正常"
+    static let healthWarning = "预警"
+    static let healthCritical = "紧急"
+    static let healthUnset = "未设置"
+    static let thresholdUnset = "未设置阈值"
+    static let warningThresholdShort = "预警"
+    static let criticalThresholdShort = "紧急"
+    static let warningThresholdLabel = "预警线"
+    static let criticalThresholdLabel = "紧急线"
+    static let healthThresholdsTitle = "健康阈值"
+    static let healthThresholdsHint = "留空表示不设置。余额低于或等于预警线时显示“预警”，低于或等于紧急线时显示“紧急”。"
+    static let healthThresholdsPercentHint = "留空表示不设置。剩余额度低于或等于预警线时显示“预警”，低于或等于紧急线时显示“紧急”。"
+    static let thresholdCurrencyHint = "金额按连接测试返回的币种保存。"
+    static let warningThresholdPercentLabel = "余量预警线（%）"
+    static let criticalThresholdPercentLabel = "余量紧急线（%）"
+    static let healthLabel = "健康"
+    static let thresholdLabel = "阈值"
+    static let quotaDetailTitle = "额度"
+
+    static func currencyMismatchWarning(
+        thresholdCurrency: String,
+        balanceCurrency: String
+    ) -> String {
+        "阈值币种为 \(thresholdCurrency)，当前余额为 \(balanceCurrency)，健康状态未计算。"
+    }
+    static let accountKindLabel = "账户类型"
+    static let statusFresh = "已更新"
+    /// The row state for a persisted Account whose Provider was dropped.
+    static let unsupportedProviderState = "不再支持"
+
+    // Provider cards and grouped sections
+    static let providerBalanceSectionTitle = "余额"
+    static let providerQuotaSectionTitle = "额度"
+    static let providerBalanceTotalLabel = "合计"
+    static let providerRefresh = "刷新此厂商"
+    static let expandProviderHint = "展开厂商"
+    static let collapseProviderHint = "收起厂商"
+    static func providerQuotaWorstRemaining(_ percentText: String) -> String {
+        "最低剩余 \(percentText)"
+    }
+    static func providerAccountCount(_ count: Int) -> String {
+        "\(count) 个账户"
+    }
+    static func providerKindCount(_ kind: AccountKind, _ count: Int) -> String {
+        "\(kind.displayName) \(count)"
+    }
+    static func providerWarningCount(_ count: Int) -> String {
+        "\(healthWarning) \(count)"
+    }
+    static func providerCriticalCount(_ count: Int) -> String {
+        "\(healthCritical) \(count)"
+    }
+    static func providerErrorCount(_ count: Int) -> String {
+        "错误 \(count)"
+    }
+    static func providerStaleCount(_ count: Int) -> String {
+        "已过期 \(count)"
+    }
 
     // Expanded row
     static let preciseBalanceLabel = "精确余额"
@@ -44,6 +106,15 @@ enum UIStrings {
     static let addAccount = "添加账户…"
     static let refreshAll = "全部刷新"
 
+    // Health transition notifications and the in-app toast fallback
+    static let healthNotificationTitle = "Quotrack 健康提醒"
+    static let healthRecoveryNotificationTitle = "Quotrack 健康恢复"
+    static let notificationOpenHint = "点击打开面板并聚焦相关账户。"
+    static let dismissNotificationToast = "关闭提醒"
+    static func healthNotificationSummary(count: Int) -> String {
+        "\(count) 个账户健康状态变化"
+    }
+
     // Settings
     static let settingsAccountsTitle = "账户"
     static let settingsPollingTitle = "轮询"
@@ -56,27 +127,28 @@ enum UIStrings {
     static let launchAtLoginHint = "默认关闭。开启后 Quotrack 会在登录时自动启动。"
     static let launchAtLoginRequiresApproval = "已请求开机启动，请在“系统设置 › 通用 › 登录项”中允许 Quotrack。"
     static let openLoginItemsSettings = "打开系统设置"
-    static let settingsUnsupportedTitle = "不可查厂商"
+    static let settingsUnsupportedTitle = "厂商支持说明"
     static let unsupportedProvidersExplanation = """
-    OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此 Quotrack v1 不会显示这些厂商。余额与消耗、配额是不同指标，混在一起会误导用户。详见 ADR-0001。
+    Quotrack 支持个人余额 API，也支持 Moonshot 的 Kimi Code 订阅额度（实验性）。SiliconFlow 的个人余额接口已停止服务，已有账户会显示为“不再支持”，不会轮询，可以删除。OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此不会出现在可添加厂商中。余额、消耗、额度是不同指标，详见 ADR-0001 与 ADR-0002。
     """
-    static let lowBalanceWarningTitle = "低余额提醒"
-    static let lowBalanceWarningToggle = "启用低余额提醒"
-    static let lowBalanceThresholdLabel = "阈值"
-    static let lowBalanceThresholdHint = "余额低于该值时，面板会显示警告（默认关闭）。"
-    static let lowBalanceThresholdSaved = "低余额提醒"
-    static let invalidThreshold = "低余额阈值必须大于 0。"
+    static let settingsDeferredIntegrationsExplanation = """
+    WorkBuddy、Claude Pro/Max、ChatGPT/Codex、Gemini CLI 和 SuperGrok 需要读取桌面应用或 CLI 的 OAuth 登录状态，v2 暂不支持。Quotrack 不会读取浏览器 Cookie、桌面容器或 CLI 凭证；相关本地桥接计划见 ADR-0002。
+    """
+    static let invalidThreshold = "阈值无效：请检查数值范围，并确保紧急线低于预警线。"
+    static let deleteAccountConfirmation = "该账户的钥匙串凭证和已保存的余额/额度快照都会被移除。"
 
     // Onboarding
     static let onboardingTitle = "欢迎使用 Quotrack"
     static let onboardingProviderTitle = "选择厂商"
-    static let onboardingProviderHint = "仅支持提供个人账户余额 API 的厂商。"
+    static let onboardingProviderHint = "支持个人余额 API，以及 Moonshot 的 Kimi Code 订阅额度（实验性）。"
     static let onboardingRegionTitle = "选择区域"
     static let onboardingRegionHint = "凭证只在所选区域内有效。"
     static let onboardingDetailsTitle = "账户信息"
     static let onboardingLabelField = "标签"
     static let onboardingCredentialField = "API 密钥"
     static let openRouterManagementKeyWarning = "OpenRouter 只能使用管理密钥，普通推理密钥无法查询余额。管理密钥权限更高，请妥善保管。"
+    static let kimiCodeCredentialWarning = "Kimi Code 订阅账户使用 sk-kimi-… 密钥，不是 Moonshot 开放平台密钥。"
+    static let experimentalBadge = "实验性"
     static let onboardingNext = "下一步"
     static let onboardingBack = "上一步"
     static let onboardingTestAndSave = "测试连接并保存"
@@ -84,4 +156,16 @@ enum UIStrings {
     static let onboardingSuccess = "连接成功，账户已保存。"
     static let onboardingDone = "完成"
     static let onboardingCredentialHint = "凭证只存储在 macOS 钥匙串中，保存后不会再次显示。"
+
+    // Dock
+    static let dockNormalDescription = "Quotrack：一切正常"
+    static let dockOpenPanelHint = "打开 Quotrack 主面板"
+
+    static func dockWarningDescription(count: Int) -> String {
+        "Quotrack：\(count) 个账户需要关注"
+    }
+
+    static func dockCriticalDescription(count: Int) -> String {
+        "Quotrack：\(count) 个账户需要立即处理"
+    }
 }

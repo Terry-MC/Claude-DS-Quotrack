@@ -23,7 +23,33 @@ struct BalanceMonitorTests {
         let row = try #require(monitor.rows.first)
         #expect(row.account.provider == .deepSeek)
         #expect(row.account.label == "个人账户")
-        #expect(row.snapshot == snapshot)
+        #expect(row.balanceSnapshot == snapshot)
+        #expect(row.status == .fresh)
+    }
+
+    @Test
+    func refreshCarriesAQuotaSnapshotForASubscriptionAccount() async throws {
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code"
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: 60,
+            fetchedAt: Date()
+        )
+        let provider = QuotaAccountProvider(snapshot: .quota(quota))
+        let monitor = LiveBalanceMonitor(provider: provider, accounts: [account])
+
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first)
+        #expect(row.snapshot == .quota(quota))
+        #expect(row.balanceSnapshot == nil)
+        #expect(row.quotaSnapshot == quota)
         #expect(row.status == .fresh)
     }
 
@@ -52,7 +78,7 @@ struct BalanceMonitorTests {
         await monitor.refresh()
 
         let row = try #require(monitor.rows.first)
-        #expect(row.snapshot == secondSnapshot)
+        #expect(row.balanceSnapshot == secondSnapshot)
         #expect(row.status == .fresh)
     }
 
@@ -73,7 +99,7 @@ struct BalanceMonitorTests {
         #expect(viewState.label == "个人账户")
         #expect(viewState.balanceText == "¥42.50")
         #expect(viewState.updatedText == "2分钟前")
-        #expect(viewState.statusText == "正常")
+        #expect(viewState.statusText == UIStrings.statusFresh)
     }
 
     @Test
@@ -114,7 +140,7 @@ struct BalanceMonitorTests {
             await monitor.refresh(accountID: account.id)
         }
 
-        #expect(monitor.rows.first?.snapshot == snapshot)
+        #expect(monitor.rows.first?.balanceSnapshot == snapshot)
     }
 
     @Test(.timeLimit(.minutes(1)))
@@ -180,6 +206,14 @@ struct BalanceMonitorTests {
             }
             await monitor.refresh()
         }
+    }
+}
+
+private struct QuotaAccountProvider: AccountProvider {
+    let snapshot: AccountSnapshot
+
+    func fetchSnapshot(for account: Account) async throws -> AccountSnapshot {
+        snapshot
     }
 }
 

@@ -31,11 +31,23 @@ extension BalanceRowTone {
                 balance: .primary,
                 aggregateState: .normal
             )
-        case .lowBalance:
+        case .warning:
             BalanceRowAppearance(
                 status: .warning,
                 balance: .warning,
                 aggregateState: .warning
+            )
+        case .critical:
+            BalanceRowAppearance(
+                status: .error,
+                balance: .error,
+                aggregateState: .critical
+            )
+        case .unset:
+            BalanceRowAppearance(
+                status: .primary,
+                balance: .primary,
+                aggregateState: .normal
             )
         case .stale:
             BalanceRowAppearance(
@@ -48,6 +60,12 @@ extension BalanceRowTone {
                 status: .warning,
                 balance: .warning,
                 aggregateState: .warning
+            )
+        case .unsupported:
+            BalanceRowAppearance(
+                status: .muted,
+                balance: .muted,
+                aggregateState: .normal
             )
         case .error:
             BalanceRowAppearance(

@@ -28,6 +28,55 @@ struct FileSnapshotStoreTests {
     }
 
     @Test
+    func v1BalanceSnapshotJSONLoadsAsABalanceAccountSnapshot() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let accountID = UUID(uuidString: "EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE")!
+        let snapshot = BalanceSnapshot(
+            accountID: accountID,
+            balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            isAvailable: true
+        )
+        // The v1 file was an array of BalanceSnapshots with no `kind` key.
+        let legacyData = try JSONEncoder().encode([snapshot])
+        try legacyData.write(to: directory.appendingPathComponent("snapshots.json"))
+
+        let store = FileSnapshotStore(directoryURL: directory)
+
+        #expect(store.loadSnapshots() == [accountID: .balance(snapshot)])
+    }
+
+    @Test
+    func quotaSnapshotRoundTripsAcrossRelaunch() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let accountID = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
+        let resetAt = Date(timeIntervalSince1970: 1_800_000_300)
+        let snapshot = QuotaSnapshot(
+            accountID: accountID,
+            limit: 100,
+            remaining: 60,
+            resetAt: resetAt,
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            packages: [
+                QuotaPackage(
+                    name: "Kimi Code",
+                    limit: 100,
+                    remaining: 60,
+                    expiresAt: resetAt
+                ),
+            ]
+        )
+        let store = FileSnapshotStore(directoryURL: directory)
+        try store.saveSnapshot(.quota(snapshot))
+
+        let relaunched = FileSnapshotStore(directoryURL: directory)
+
+        #expect(relaunched.loadSnapshots() == [accountID: .quota(snapshot)])
+    }
+
+    @Test
     func snapshotsRoundTripAcrossRelaunch() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -44,7 +93,7 @@ struct FileSnapshotStoreTests {
 
         let relaunched = FileSnapshotStore(directoryURL: directory)
 
-        #expect(relaunched.loadSnapshots() == [accountID: snapshot])
+        #expect(relaunched.loadBalanceSnapshots() == [accountID: snapshot])
     }
 
     @Test
@@ -71,7 +120,7 @@ struct FileSnapshotStoreTests {
 
         let relaunched = FileSnapshotStore(directoryURL: directory)
 
-        #expect(relaunched.loadSnapshots() == [accountID: newer])
+        #expect(relaunched.loadBalanceSnapshots() == [accountID: newer])
     }
 
     @Test
@@ -102,7 +151,7 @@ struct FileSnapshotStoreTests {
 
         let relaunched = FileSnapshotStore(directoryURL: directory)
         #expect(relaunched.loadAccounts() == [kept])
-        #expect(relaunched.loadSnapshots() == [kept.id: keptSnapshot])
+        #expect(relaunched.loadBalanceSnapshots() == [kept.id: keptSnapshot])
     }
 
     @Test
