@@ -5,10 +5,10 @@ A macOS menu-bar app with a floating panel that shows the remaining prepaid Bala
 ## Status
 
 - **v1 complete** on `main` (PR #16, merge commit `7dd3b37`).
-- **v2 complete** on `main` (PR #28, merge commit `7c72d89`); #27 remains open for a live-credential manual smoke.
-- 419 Swift Testing tests across 58 suites pass.
-- Real-key live verification completed for **DeepSeek** and **Moonshot (Kimi, domestic)** in v1. **Kimi Code Quota**, **OpenRouter**, and **SiliconFlow** remain unverified against real credentials; see `docs/manual/`.
-- The v1 spec (#1) and its implementation tickets (#2–#15) are closed. The v2 spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17); decisions are in `docs/adr/0002-threshold-based-balance-and-quota.md`.
+- **v2 complete** on `main` (PR #28, merge commit `7c72d89`; UI/data follow-up in PR #30, merge commit `6315a5d`).
+- 439 Swift Testing tests across 60 suites pass.
+- Real-key live verification completed for **DeepSeek** and **Moonshot (Kimi, domestic)** in v1. **Kimi Code Quota** was verified against a live account on 2026-11-04, including the new `usages` ratio-pool response. **OpenRouter** remains unverified pending a management key; **SiliconFlow** no longer serves a balance endpoint.
+- The v1 spec (#1), the v2 spec ([#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17)), and all implementation and acceptance tickets are closed. v2 decisions are in `docs/adr/0002-threshold-based-balance-and-quota.md`.
 
 ## Features
 
@@ -58,13 +58,16 @@ Mock demo:
 open .build/DerivedData/Build/Products/Debug/Quotrack.app --args --mock
 ```
 
+Mock mode uses an in-memory copy of the fixture Accounts. Settings edits in mock
+mode do not touch the real `accounts.json`, settings file, or Keychain.
+
 The generated `Quotrack.xcodeproj`, `.build/`, and `build/` are gitignored. `project.yml` is the source of truth for the project.
 
 ## Using the app
 
 - **Left-click** the Quotrack icon in the menu bar to show or hide the floating panel.
 - **Right-click** the icon for Settings, Launch at Login, Switch Data Source (Debug builds), and Quit.
-- The dock at the right edge stays visible while the panel is hidden. Click it to open the panel; its badge counts Accounts in warning or critical.
+- Drag the panel to the right edge and release to hide it and reveal the dock. Click the dock to restore the panel; its badge counts Accounts in warning or critical. The dock is not a permanent window.
 - Add an Account from onboarding or **设置… → 添加账户…**. Choose the Account Kind first: Moonshot Balance uses an open-platform key, while Moonshot subscription uses a Kimi Code `sk-kimi-…` key. Moonshot requires a Region matching the credential; OpenRouter requires a **management key**, not an inference key.
 - The panel groups Accounts into Provider cards. Collapse a card to see per-Kind Balance totals or the worst remaining Quota percentage. Click an Account row to expand the exact Balance or quota, fetch time, breakdown, error detail, and refresh action.
 
@@ -74,7 +77,7 @@ The generated `Quotrack.xcodeproj`, `.build/`, and `build/` are gitignored. `pro
 |---|---|---|---|---|---|
 | DeepSeek | Balance | API key | — | `GET /user/balance` | Verified with a real key |
 | Moonshot (Kimi) | Balance | API key | Domestic / International | `GET /v1/users/me/balance` | Domestic verified with a real key; international pending |
-| Moonshot — Kimi Code | Quota (experimental) | `sk-kimi-…` key | Domestic / International | `GET /coding/v1/usages` | Unverified; endpoint is undocumented |
+| Moonshot — Kimi Code | Quota (experimental) | `sk-kimi-…` key | Domestic / International | `GET /coding/v1/usages` | Verified with a live account (2026-11-04); endpoint is undocumented |
 | OpenRouter | Balance | Management key | — | `GET /api/v1/credits` | Unverified (no management key) |
 | SiliconFlow | Legacy only | API key | Domestic / International | none | Endpoint stopped serving; existing Accounts show as unsupported |
 
@@ -113,7 +116,7 @@ Provider and Keychain checks that need real credentials are documented under `do
 
 - Ad-hoc signed builds change identity on rebuild, so macOS may ask for Keychain access again. Choose **始终允许** (Always Allow) and, if necessary, re-enter the credential. Team signing avoids this.
 - Launch at Login is unreliable while the app runs from DerivedData. Copy `Quotrack.app` to `/Applications` for daily use.
-- Kimi Code Quota, OpenRouter, and SiliconFlow have fixture coverage only; live behavior is unverified until the relevant credentials are supplied.
+- OpenRouter has fixture coverage only; live behavior is unverified until a management key is supplied. SiliconFlow no longer serves its balance endpoint.
 - The Kimi Code usage endpoint is undocumented and treated as experimental; a malformed response fails only that Account.
 - Notification permission is requested on the first Health transition. If denied, Quotrack shows an in-app toast instead. Notifications are never sent for Stale or error states.
 - The dock is placed on the main screen and repositions when displays change; it does not follow the pointer between displays.
@@ -121,7 +124,7 @@ Provider and Keychain checks that need real credentials are documented under `do
 
 ## v2 scope (delivered)
 
-v2 turns the panel into a threshold-based health monitor. The full spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17); the decisions are recorded in `docs/adr/0002-threshold-based-balance-and-quota.md`.
+v2 turns the panel into a threshold-based health monitor. The full spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17) (closed); the decisions are recorded in `docs/adr/0002-threshold-based-balance-and-quota.md`.
 
 **In scope**
 
