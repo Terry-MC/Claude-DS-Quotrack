@@ -52,6 +52,8 @@ protocol BalanceMonitor: AnyObject, Observable {
     func stopPolling()
     func refresh() async
     func refresh(accountID: Account.ID) async
+    /// Refreshes only the Accounts belonging to one Provider.
+    func refresh(provider: Provider) async
 }
 
 extension BalanceMonitor {
@@ -397,6 +399,16 @@ final class LiveBalanceMonitor: BalanceMonitor {
             return
         }
         await refreshAccounts([account])
+    }
+
+    /// Refreshes exactly one Provider's Accounts, sharing the same fetch cap
+    /// as polling. A manual refresh bypasses each Account's pending backoff.
+    /// Legacy Accounts are excluded, so refreshing an unsupported Provider
+    /// never sends its credential.
+    func refresh(provider: Provider) async {
+        await refreshAccounts(
+            pollableAccounts.filter { $0.provider == provider }
+        )
     }
 
     private func refreshAccounts(_ accountsToRefresh: [Account]) async {
