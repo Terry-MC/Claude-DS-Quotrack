@@ -91,4 +91,6 @@ private final class FakeMonitor: BalanceMonitor {
     func refresh() async {}
 
     func refresh(accountID: Account.ID) async {}
+
+    func refresh(provider: Provider) async {}
 }

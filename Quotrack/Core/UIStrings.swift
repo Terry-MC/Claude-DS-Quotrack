@@ -61,6 +61,35 @@ enum UIStrings {
     /// The row state for a persisted Account whose Provider was dropped.
     static let unsupportedProviderState = "不再支持"
 
+    // Provider cards and grouped sections
+    static let providerBalanceSectionTitle = "余额"
+    static let providerQuotaSectionTitle = "额度"
+    static let providerBalanceTotalLabel = "合计"
+    static let providerRefresh = "刷新此厂商"
+    static let expandProviderHint = "展开厂商"
+    static let collapseProviderHint = "收起厂商"
+    static func providerQuotaWorstRemaining(_ percentText: String) -> String {
+        "最低剩余 \(percentText)"
+    }
+    static func providerAccountCount(_ count: Int) -> String {
+        "\(count) 个账户"
+    }
+    static func providerKindCount(_ kind: AccountKind, _ count: Int) -> String {
+        "\(kind.displayName) \(count)"
+    }
+    static func providerWarningCount(_ count: Int) -> String {
+        "\(healthWarning) \(count)"
+    }
+    static func providerCriticalCount(_ count: Int) -> String {
+        "\(healthCritical) \(count)"
+    }
+    static func providerErrorCount(_ count: Int) -> String {
+        "错误 \(count)"
+    }
+    static func providerStaleCount(_ count: Int) -> String {
+        "已过期 \(count)"
+    }
+
     // Expanded row
     static let preciseBalanceLabel = "精确余额"
     static let fetchedAtLabel = "获取时间"

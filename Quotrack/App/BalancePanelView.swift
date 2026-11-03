@@ -9,6 +9,7 @@ struct BalancePanelView: View {
     let monitor: any BalanceMonitor
     var onAddAccount: () -> Void = {}
     @State private var expansion = BalanceRowExpansion()
+    @State private var providerCollapse = ProviderCollapseState()
 
     var body: some View {
         let rows = monitor.rows
@@ -73,23 +74,284 @@ struct BalancePanelView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rows) { row in
-                        BalanceRowView(
-                            account: row.account,
-                            viewState: BalanceRowPresentation.viewState(for: row, now: Date()),
-                            detail: BalanceRowPresentation.detailViewState(for: row),
-                            isExpanded: expansion.isExpanded(row.id),
-                            onToggle: { expansion.toggle(row.id) },
-                            onRefresh: { await monitor.refresh(accountID: row.id) }
+                    ForEach(
+                        ProviderGroupPresentation.groups(
+                            from: rows,
+                            collapseState: providerCollapse
+                        )
+                    ) { group in
+                        ProviderCardView(
+                            group: group,
+                            isRowExpanded: { expansion.isExpanded($0) },
+                            onToggleRow: { expansion.toggle($0) },
+                            onToggleCollapse: {
+                                providerCollapse.toggle(group.provider)
+                            },
+                            onRefreshProvider: {
+                                await monitor.refresh(provider: group.provider)
+                            },
+                            onRefreshAccount: {
+                                await monitor.refresh(accountID: $0)
+                            }
                         )
                         Divider()
                     }
                 }
-                .padding(.horizontal, 14)
                 .padding(.vertical, 4)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// One Provider card. The header is always visible; collapsing swaps the
+/// Account rows for a per-Kind summary line without changing the underlying
+/// row states.
+@MainActor
+private struct ProviderCardView: View {
+    let group: ProviderGroupViewState
+    let isRowExpanded: (Account.ID) -> Bool
+    let onToggleRow: (Account.ID) -> Void
+    let onToggleCollapse: () -> Void
+    let onRefreshProvider: @MainActor () async -> Void
+    let onRefreshAccount: @MainActor (Account.ID) async -> Void
+
+    @State private var isRefreshing = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if group.isCollapsed {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(group.sections) { section in
+                        ProviderKindSummaryView(section: section)
+                    }
+                }
+                .padding(.leading, 26)
+                .padding(.trailing, 14)
+                .padding(.bottom, 8)
+            } else {
+                ForEach(group.sections) { section in
+                    sectionView(section)
+                }
+                .padding(.bottom, 4)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button(action: onToggleCollapse) {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(group.isCollapsed ? 0 : 90))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(group.name)
+                                .font(.headline)
+                            ProviderHealthBadge(
+                                health: group.health,
+                                text: group.healthText
+                            )
+                            if group.errorCount > 0 {
+                                ProviderCountBadge(
+                                    text: group.errorText,
+                                    color: .red
+                                )
+                            }
+                            if group.staleCount > 0 {
+                                ProviderCountBadge(
+                                    text: group.staleText,
+                                    color: .secondary
+                                )
+                            }
+                        }
+                        Text(group.kindCountText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(
+                group.isCollapsed
+                    ? UIStrings.expandProviderHint
+                    : UIStrings.collapseProviderHint
+            )
+
+            Button {
+                isRefreshing = true
+                Task {
+                    await onRefreshProvider()
+                    isRefreshing = false
+                }
+            } label: {
+                Label(UIStrings.providerRefresh, systemImage: "arrow.clockwise")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.borderless)
+            .disabled(isRefreshing)
+            .help(UIStrings.providerRefresh)
+            .accessibilityLabel(UIStrings.providerRefresh)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private func sectionView(_ section: ProviderKindSectionViewState) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ProviderKindSectionHeader(section: section)
+            ForEach(section.rows) { row in
+                BalanceRowView(
+                    account: row.account,
+                    viewState: BalanceRowPresentation.viewState(
+                        for: row,
+                        now: Date()
+                    ),
+                    detail: BalanceRowPresentation.detailViewState(for: row),
+                    isExpanded: isRowExpanded(row.id),
+                    showsProviderName: false,
+                    onToggle: { onToggleRow(row.id) },
+                    onRefresh: { await onRefreshAccount(row.id) }
+                )
+                .padding(.horizontal, 14)
+                Divider()
+                    .padding(.leading, 18)
+            }
+        }
+    }
+}
+
+/// The expanded section title. Health and the per-Kind totals sit on the
+/// header so a section stays scannable without opening an Account row.
+private struct ProviderKindSectionHeader: View {
+    let section: ProviderKindSectionViewState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Text(section.title)
+                    .font(.subheadline.weight(.semibold))
+                Text(UIStrings.providerAccountCount(section.accountCount))
+                    .foregroundStyle(.secondary)
+                if section.warningCount > 0 {
+                    Text(UIStrings.providerWarningCount(section.warningCount))
+                        .foregroundStyle(.orange)
+                }
+                if section.criticalCount > 0 {
+                    Text(UIStrings.providerCriticalCount(section.criticalCount))
+                        .foregroundStyle(.red)
+                }
+                if section.errorCount > 0 {
+                    Text(UIStrings.providerErrorCount(section.errorCount))
+                        .foregroundStyle(.red)
+                }
+                if section.staleCount > 0 {
+                    Text(UIStrings.providerStaleCount(section.staleCount))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                ProviderHealthBadge(
+                    health: section.health,
+                    text: section.healthText
+                )
+            }
+            .font(.caption)
+
+            if section.kind == .balance, let total = section.balanceTotalText {
+                Text(total)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            } else if let worst = section.quotaWorstRemainingSummaryText {
+                Text(worst)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.leading, 26)
+        .padding(.trailing, 14)
+        .padding(.top, 6)
+        .padding(.bottom, 2)
+    }
+}
+
+/// The per-Kind line shown while a Provider card is collapsed.
+private struct ProviderKindSummaryView: View {
+    let section: ProviderKindSectionViewState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 6) {
+                Text(section.title)
+                    .font(.caption.weight(.semibold))
+                Text(UIStrings.providerAccountCount(section.accountCount))
+                    .foregroundStyle(.secondary)
+                if section.errorCount > 0 {
+                    Text(UIStrings.providerErrorCount(section.errorCount))
+                        .foregroundStyle(.red)
+                }
+                if section.staleCount > 0 {
+                    Text(UIStrings.providerStaleCount(section.staleCount))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                ProviderHealthBadge(
+                    health: section.health,
+                    text: section.healthText
+                )
+            }
+            .font(.caption)
+
+            if section.kind == .balance, let total = section.balanceTotalText {
+                Text(total)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            } else if let worst = section.quotaWorstRemainingSummaryText {
+                Text(worst)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+    }
+}
+
+private struct ProviderHealthBadge: View {
+    let health: AccountHealth
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(health.color)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(health.color.opacity(0.12), in: Capsule())
+    }
+}
+
+private struct ProviderCountBadge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundStyle(color)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(color.opacity(0.10), in: Capsule())
     }
 }
 
@@ -99,6 +361,9 @@ private struct BalanceRowView: View {
     let viewState: BalanceRowViewState
     let detail: BalanceRowDetailViewState
     let isExpanded: Bool
+    /// False inside a Provider card, where the card header already names the
+    /// Provider. The standalone row previews keep the Provider name.
+    var showsProviderName: Bool = true
     let onToggle: () -> Void
     let onRefresh: @MainActor () async -> Void
 
@@ -113,8 +378,10 @@ private struct BalanceRowView: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(viewState.providerName)
-                                .font(.headline)
+                            if showsProviderName {
+                                Text(viewState.providerName)
+                                    .font(.headline)
+                            }
                             if viewState.showsHealth {
                                 Text(viewState.healthText)
                                     .font(.caption2.weight(.semibold))
@@ -141,8 +408,8 @@ private struct BalanceRowView: View {
                             }
                         }
                         Text(viewState.label)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .font(showsProviderName ? .subheadline : .headline)
+                            .foregroundStyle(showsProviderName ? .secondary : .primary)
                         if !viewState.isQuota {
                             BalanceThresholdGauge(
                                 account: account,
@@ -616,4 +883,189 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
     )
     .padding()
     .frame(width: 360)
+}
+
+#Preview("单账户厂商") {
+    let now = Date()
+    let row = previewBalanceRow(
+        provider: .deepSeek,
+        label: "个人账户",
+        amount: Decimal(string: "88.00")!,
+        warning: 20,
+        critical: 10,
+        now: now
+    )
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: [row]))
+        .frame(width: 360, height: 280)
+}
+
+#Preview("多账户厂商") {
+    let now = Date()
+    let rows = [
+        previewBalanceRow(
+            provider: .deepSeek,
+            label: "个人账户",
+            amount: Decimal(string: "88.00")!,
+            warning: 20,
+            critical: 10,
+            now: now
+        ),
+        previewBalanceRow(
+            provider: .deepSeek,
+            label: "工作账户",
+            amount: Decimal(string: "12.00")!,
+            warning: 20,
+            critical: 10,
+            now: now
+        ),
+    ]
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
+        .frame(width: 360, height: 520)
+}
+
+#Preview("混合账户类型（Moonshot）") {
+    let now = Date()
+    let rows = makeMixedKindPreviewRows(now: now)
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
+        .frame(width: 360, height: 640)
+}
+
+#Preview("折叠的厂商摘要") {
+    let now = Date()
+    let collapse = {
+        var state = ProviderCollapseState()
+        state.toggle(.moonshot)
+        return state
+    }()
+    let group = ProviderGroupPresentation.groups(
+        from: makeMixedKindPreviewRows(now: now),
+        collapseState: collapse
+    )[0]
+    ProviderCardView(
+        group: group,
+        isRowExpanded: { _ in false },
+        onToggleRow: { _ in },
+        onToggleCollapse: {},
+        onRefreshProvider: {},
+        onRefreshAccount: { _ in }
+    )
+    .padding(.vertical, 8)
+    .frame(width: 360)
+    .background(Color(nsColor: .windowBackgroundColor))
+}
+
+private func makeMixedKindPreviewRows(now: Date) -> [BalanceRow] {
+    [
+        previewBalanceRow(
+            provider: .moonshot,
+            label: "开放平台 · 国内",
+            currency: .cny,
+            amount: Decimal(string: "128.40")!,
+            warning: 50,
+            critical: 20,
+            region: .domestic,
+            now: now
+        ),
+        previewBalanceRow(
+            provider: .moonshot,
+            label: "开放平台 · 国际",
+            currency: .usd,
+            amount: Decimal(string: "30.00")!,
+            warning: 20,
+            critical: 5,
+            region: .international,
+            now: now
+        ),
+        previewQuotaRow(
+            label: "Kimi Code · 国内",
+            remaining: 15,
+            warning: 20,
+            critical: 10,
+            region: .domestic,
+            now: now
+        ),
+        previewQuotaRow(
+            label: "Kimi Code · 国际",
+            limit: 200,
+            remaining: 80,
+            warning: 20,
+            critical: 10,
+            region: .international,
+            now: now
+        ),
+    ]
+}
+
+private func previewBalanceRow(
+    provider: Provider,
+    label: String,
+    currency: Currency = .cny,
+    amount: Decimal,
+    warning: Decimal? = nil,
+    critical: Decimal? = nil,
+    region: Region? = nil,
+    now: Date
+) -> BalanceRow {
+    let account = Account(
+        id: UUID(),
+        provider: provider,
+        region: region,
+        currency: currency,
+        label: label,
+        warningThreshold: warning,
+        criticalThreshold: critical
+    )
+    return BalanceRow(
+        account: account,
+        snapshot: .balance(
+            BalanceSnapshot(
+                accountID: account.id,
+                balance: Balance(amount: amount, currency: currency),
+                fetchedAt: now.addingTimeInterval(-90),
+                isAvailable: true
+            )
+        ),
+        status: .fresh
+    )
+}
+
+private func previewQuotaRow(
+    label: String,
+    limit: Decimal = 100,
+    remaining: Decimal,
+    warning: Decimal? = nil,
+    critical: Decimal? = nil,
+    region: Region? = .domestic,
+    now: Date
+) -> BalanceRow {
+    let account = Account(
+        id: UUID(),
+        provider: .moonshot,
+        region: region,
+        kind: .subscription,
+        label: label,
+        warningThreshold: warning,
+        criticalThreshold: critical
+    )
+    return BalanceRow(
+        account: account,
+        snapshot: .quota(
+            QuotaSnapshot(
+                accountID: account.id,
+                limit: limit,
+                remaining: remaining,
+                resetAt: now.addingTimeInterval(86_400),
+                fetchedAt: now.addingTimeInterval(-60),
+                windows: [
+                    QuotaWindow(
+                        name: "5 小时窗口",
+                        limit: 100,
+                        remaining: min(Decimal(100), remaining + 40),
+                        resetAt: now.addingTimeInterval(3_600)
+                    ),
+                ]
+            )
+        ),
+        status: .fresh
+    )
 }
