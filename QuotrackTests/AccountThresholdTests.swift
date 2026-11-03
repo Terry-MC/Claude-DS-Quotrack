@@ -19,6 +19,108 @@ struct AccountThresholdTests {
     }
 
     @Test
+    func quotaThresholdsDefaultToTenPercentWarningAndNoCritical() {
+        let quotaDefaults = AccountThresholds.defaults(for: .subscription)
+        #expect(quotaDefaults.warning == 10)
+        #expect(quotaDefaults.critical == nil)
+        #expect(AccountThresholds.defaults(for: .balance) == AccountThresholds())
+    }
+
+    @Test
+    func thresholdValidationUsesTheAccountKindRange() throws {
+        try AccountThresholds(warning: 10).validate(for: .balance)
+        try AccountThresholds(warning: 10, critical: 5).validate(for: .subscription)
+        try AccountThresholds(warning: 0).validate(for: .subscription)
+
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(warning: 0).validate(for: .balance)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(critical: -1).validate(for: .balance)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(warning: 101).validate(for: .subscription)
+        }
+        #expect(throws: AccountThresholdError.valueOutOfRange) {
+            try AccountThresholds(critical: -1).validate(for: .subscription)
+        }
+        #expect(throws: AccountThresholdError.criticalNotBelowWarning) {
+            try AccountThresholds(warning: 10, critical: 10).validate(for: .subscription)
+        }
+    }
+
+    @Test
+    func theManagerValidatesThresholdsAgainstTheAccountKind() throws {
+        let manager = makeManager(store: InMemorySnapshotStore())
+        let subscription = try manager.addAccount(
+            AccountDraft(
+                provider: .moonshot,
+                label: "Kimi Code",
+                credential: "sk-kimi",
+                kind: .subscription
+            )
+        )
+
+        try manager.updateThresholds(
+            accountID: subscription.id,
+            thresholds: AccountThresholds(warning: 0)
+        )
+        #expect(manager.accounts.first?.warningThreshold == 0)
+
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: subscription.id,
+                thresholds: AccountThresholds(warning: 101)
+            )
+        }
+
+        let balance = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateThresholds(
+                accountID: balance.id,
+                thresholds: AccountThresholds(warning: 0)
+            )
+        }
+    }
+
+    @Test
+    func theV1ThresholdPathUsesTheKindRangeAndClearsCritical() throws {
+        let manager = makeManager(store: InMemorySnapshotStore())
+        let subscription = try manager.addAccount(
+            AccountDraft(
+                provider: .moonshot,
+                label: "Kimi Code",
+                credential: "sk-kimi",
+                kind: .subscription
+            )
+        )
+        try manager.updateThresholds(
+            accountID: subscription.id,
+            thresholds: AccountThresholds(warning: 20, critical: 10)
+        )
+
+        #expect(throws: AccountManagerError.invalidThreshold) {
+            try manager.updateLowBalanceThreshold(
+                accountID: subscription.id,
+                threshold: 101
+            )
+        }
+
+        try manager.updateLowBalanceThreshold(
+            accountID: subscription.id,
+            threshold: 0
+        )
+
+        let updated = try #require(manager.accounts.first)
+        #expect(updated.warningThreshold == 0)
+        #expect(updated.criticalThreshold == nil)
+    }
+
+    @Test
     func warningAndCriticalThresholdsCanBeSetAndPersist() throws {
         let store = InMemorySnapshotStore()
         let manager = makeManager(store: store)

@@ -41,6 +41,25 @@ struct AccountManagerTests {
     }
 
     @Test
+    func aNewSubscriptionAccountDefaultsToATenPercentWarning() throws {
+        let manager = AccountManager(
+            store: InMemorySnapshotStore(),
+            credentialStore: InMemoryCredentialStore()
+        )
+        let account = try manager.addAccount(
+            AccountDraft(
+                provider: .moonshot,
+                label: "Kimi Code",
+                credential: "sk-kimi",
+                kind: .subscription
+            )
+        )
+
+        #expect(account.warningThreshold == 10)
+        #expect(account.criticalThreshold == nil)
+    }
+
+    @Test
     func addingASubscriptionAccountKeepsItsKind() throws {
         let store = InMemorySnapshotStore()
         let manager = AccountManager(

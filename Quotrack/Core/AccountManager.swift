@@ -26,12 +26,16 @@ final class AccountManager {
         guard !draft.credential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
+        let defaults = AccountThresholds.defaults(for: draft.kind)
         let account = Account(
             id: UUID(),
             provider: draft.provider,
             region: draft.normalizedRegion,
             kind: draft.kind,
-            label: trimmedLabel
+            currency: draft.currency,
+            label: trimmedLabel,
+            warningThreshold: defaults.warning,
+            criticalThreshold: defaults.critical
         )
         try credentialStore.save(draft.credential, for: account.id)
         do {
@@ -63,43 +67,28 @@ final class AccountManager {
         guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
             throw AccountManagerError.accountNotFound
         }
-        try Self.validate(thresholds)
+        do {
+            try thresholds.validate(for: accounts[index].kind)
+        } catch is AccountThresholdError {
+            throw AccountManagerError.invalidThreshold
+        }
         try replaceAccount(
             at: index,
             with: accounts[index].with(thresholds: thresholds)
         )
     }
 
-    /// Thresholds are optional, but any value that is present must be positive
-    /// and the critical line must be below the warning line.
-    private static func validate(_ thresholds: AccountThresholds) throws {
-        for value in [thresholds.warning, thresholds.critical].compactMap({ $0 }) {
-            guard value > 0 else {
-                throw AccountManagerError.invalidThreshold
-            }
-        }
-        if let warning = thresholds.warning,
-           let critical = thresholds.critical,
-           critical >= warning {
-            throw AccountManagerError.invalidThreshold
-        }
-    }
-
-    /// Enables or clears the Account's low-Balance warning. A threshold must
-    /// be greater than zero; `nil` turns the warning off.
+    /// Enables or clears the Account's v1 single warning threshold. It routes
+    /// through the kind-aware two-level validation, so a Quota Account cannot
+    /// store an out-of-range percentage. The critical threshold is cleared
+    /// because the v1 path has no second level.
     func updateLowBalanceThreshold(
         accountID: Account.ID,
         threshold: Decimal?
     ) throws {
-        guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
-            throw AccountManagerError.accountNotFound
-        }
-        if let threshold, threshold <= 0 {
-            throw AccountManagerError.invalidThreshold
-        }
-        try replaceAccount(
-            at: index,
-            with: accounts[index].with(lowBalanceThreshold: threshold)
+        try updateThresholds(
+            accountID: accountID,
+            thresholds: AccountThresholds(warning: threshold)
         )
     }
 
@@ -155,7 +144,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
         case .accountNotFound: "账户不存在。"
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
-        case .invalidThreshold: "阈值必须大于 0，且紧急线必须低于预警线。"
+        case .invalidThreshold: "阈值无效：请检查数值范围，并确保紧急线低于预警线。"
         }
     }
 }

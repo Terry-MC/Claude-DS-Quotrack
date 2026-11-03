@@ -62,6 +62,19 @@ struct QuotaSnapshot: Codable, Equatable, Sendable {
         }
         return used / limit
     }
+
+    /// The fraction of the allowance remaining. Health and the Quota row both
+    /// use this value so the percentage has one definition.
+    var remainingRatio: Decimal {
+        guard limit > 0 else {
+            return 0
+        }
+        return remaining / limit
+    }
+
+    var remainingPercent: Decimal {
+        remainingRatio * 100
+    }
 }
 
 /// The metric a fetched Snapshot carries. Balance and Quota share the monitor,

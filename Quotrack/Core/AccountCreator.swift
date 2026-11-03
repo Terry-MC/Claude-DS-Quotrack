@@ -13,17 +13,21 @@ struct AccountCreator {
         self.connectionTester = connectionTester
     }
 
-    /// Runs the connection test before any Keychain or metadata write. Both
-    /// thresholds are applied after the Account exists.
+    /// Validates thresholds before the connection test, then tests the
+    /// credential before any Keychain or metadata write. Both thresholds are
+    /// applied after the Account exists, including an explicit empty pair that
+    /// clears the Kind's default.
     func create(
         _ draft: AccountDraft,
         thresholds: AccountThresholds
     ) async throws -> Account {
+        do {
+            try thresholds.validate(for: draft.kind)
+        } catch is AccountThresholdError {
+            throw AccountManagerError.invalidThreshold
+        }
         _ = try await connectionTester.testConnection(draft)
         let account = try manager.addAccount(draft)
-        guard thresholds.warning != nil || thresholds.critical != nil else {
-            return account
-        }
         try manager.updateThresholds(
             accountID: account.id,
             thresholds: thresholds

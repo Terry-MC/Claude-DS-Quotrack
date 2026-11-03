@@ -31,6 +31,33 @@ struct AccountCreatorTests {
     }
 
     @Test
+    func invalidThresholdsAreRejectedBeforeTheConnectionTestOrSave() async throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let tester = RecordingConnectionTester(balanceResult: .success(makeSnapshot()))
+        let creator = AccountCreator(manager: manager, connectionTester: tester)
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+
+        await #expect(throws: AccountManagerError.invalidThreshold) {
+            try await creator.create(
+                draft,
+                thresholds: AccountThresholds(warning: 150)
+            )
+        }
+
+        #expect(manager.accounts.isEmpty)
+        #expect(store.loadAccounts().isEmpty)
+        #expect(credentials.saveCallCount == 0)
+        #expect(tester.requests.isEmpty)
+    }
+
+    @Test
     func aSuccessfulConnectionTestSavesTheAccountAndThreshold() async throws {
         let store = InMemorySnapshotStore()
         let credentials = InMemoryCredentialStore()

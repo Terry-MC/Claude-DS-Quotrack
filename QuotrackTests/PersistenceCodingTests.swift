@@ -55,6 +55,7 @@ struct PersistenceCodingTests {
             provider: .moonshot,
             region: .domestic,
             kind: .subscription,
+            currency: .cny,
             label: "Kimi Code",
             warningThreshold: 20,
             criticalThreshold: 10
@@ -65,8 +66,36 @@ struct PersistenceCodingTests {
 
         #expect(decoded == [account])
         #expect(decoded.first?.kind == .subscription)
+        #expect(decoded.first?.currency == .cny)
         #expect(decoded.first?.warningThreshold == 20)
         #expect(decoded.first?.criticalThreshold == 10)
+    }
+
+    @Test
+    func invalidPersistedThresholdsDecodeAsUnset() throws {
+        let subscription = Account(
+            id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 150
+        )
+        let balance = Account(
+            id: UUID(uuidString: "66666666-6666-6666-6666-666666666666")!,
+            provider: .deepSeek,
+            label: "个人账户",
+            warningThreshold: 5,
+            criticalThreshold: 10
+        )
+
+        let data = try JSONEncoder().encode([subscription, balance])
+        let decoded = try JSONDecoder().decode([Account].self, from: data)
+
+        #expect(decoded.count == 2)
+        #expect(decoded[0].warningThreshold == nil)
+        #expect(decoded[0].criticalThreshold == nil)
+        #expect(decoded[1].warningThreshold == nil)
+        #expect(decoded[1].criticalThreshold == nil)
     }
 
     @Test
