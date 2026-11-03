@@ -20,9 +20,24 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
     /// A Provider-requested delay before the next attempt, when one was given.
     let retryAfter: TimeInterval?
 
-    init(_ category: Category, retryAfter: TimeInterval? = nil) {
+    /// The HTTP status that produced this failure, when it came from a response.
+    /// It is diagnostic detail only and never changes identity or retry logic.
+    let statusCode: Int?
+
+    /// Extra user-facing detail, such as a Keychain access failure. It never
+    /// participates in equality or retry grouping.
+    let detail: String?
+
+    init(
+        _ category: Category,
+        retryAfter: TimeInterval? = nil,
+        statusCode: Int? = nil,
+        detail: String? = nil
+    ) {
         self.category = category
         self.retryAfter = retryAfter
+        self.statusCode = statusCode
+        self.detail = detail
     }
 
     static let authentication = Self(.authentication)
@@ -56,7 +71,10 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
     /// The user-facing explanation for this failure. Provider-aware because
     /// OpenRouter's permission failure needs the management-key message.
     func userMessage(for provider: Provider) -> String {
-        switch category {
+        if let detail {
+            return detail
+        }
+        return switch category {
         case .authentication:
             // Region-locked credentials commonly fail with the same 401 as an
             // invalid key, so Region-capable Providers point at the Region.
@@ -76,7 +94,7 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
         case .unsupportedAccountKind:
             UIStrings.unsupportedAccountKindError
         case .unknown:
-            UIStrings.unknownError
+            statusCode.map(UIStrings.unknownErrorWithStatus) ?? UIStrings.unknownError
         }
     }
 
@@ -93,6 +111,12 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
         }
         if error is DecodingError {
             return .malformedResponse
+        }
+        if let credentialError = error as? CredentialStoreError {
+            return BalanceProviderError(
+                .authentication,
+                detail: credentialError.localizedDescription
+            )
         }
         return .unknown
     }

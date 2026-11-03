@@ -5,7 +5,7 @@ import CoreGraphics
 /// it stays inside the screen when the display is small or changes.
 enum DockFrameCalculator {
     /// The dock's fixed content size. The SwiftUI content fills this exactly.
-    static let defaultSize = CGSize(width: 60, height: 148)
+    static let defaultSize = CGSize(width: 36, height: 104)
 
     /// Places the dock flush with the right edge and centered vertically in
     /// `visibleFrame`. A dock larger than the display shrinks to fit instead of

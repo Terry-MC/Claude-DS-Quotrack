@@ -26,7 +26,10 @@ final class AccountManager {
         thresholds: AccountThresholds? = nil
     ) throws -> Account {
         let trimmedLabel = try validatedLabel(draft.label)
-        guard !draft.credential.isEmpty else {
+        let credential = draft.credential.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !credential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
         guard draft.provider.supportedKinds.contains(draft.kind) else {
@@ -49,7 +52,7 @@ final class AccountManager {
             warningThreshold: resolvedThresholds.warning,
             criticalThreshold: resolvedThresholds.critical
         )
-        try credentialStore.save(draft.credential, for: account.id)
+        try credentialStore.save(credential, for: account.id)
         do {
             try store.saveAccounts(accounts + [account])
         } catch {
@@ -105,10 +108,13 @@ final class AccountManager {
         guard accounts.contains(where: { $0.id == accountID }) else {
             throw AccountManagerError.accountNotFound
         }
-        guard !credential.isEmpty else {
+        let trimmedCredential = credential.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !trimmedCredential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
-        try credentialStore.save(credential, for: accountID)
+        try credentialStore.save(trimmedCredential, for: accountID)
     }
 
     /// Removes the Keychain item first so no orphan secret can survive, then
@@ -137,6 +143,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
     case missingCredential
     case invalidThreshold
     case unsupportedAccountKind
+    case kimiCodeCredentialRequired
 
     var errorDescription: String? {
         switch self {
@@ -145,6 +152,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
         case .missingCredential: "请填写凭证。"
         case .invalidThreshold: UIStrings.invalidThreshold
         case .unsupportedAccountKind: "该厂商不支持此账户类型。"
+        case .kimiCodeCredentialRequired: UIStrings.kimiCodeCredentialRequired
         }
     }
 }

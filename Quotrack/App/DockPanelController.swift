@@ -9,7 +9,8 @@ import SwiftUI
 @MainActor
 final class DockPanelController {
     private let panel: DockPanel
-    private let hostingView: DockHostingView
+    private let hostingView: NSHostingView<DockContentView>
+    private let clickOverlay: DockClickOverlay
     private let monitor: any BalanceMonitor
     private let onOpenPanel: () -> Void
     private var presentation: DockPresentation
@@ -53,20 +54,30 @@ final class DockPanelController {
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
-        let hostingView = DockHostingView(
-            rootView: DockContentView(
-                presentation: presentation,
-                onOpen: onOpenPanel
-            )
+        let hostingView = NSHostingView(
+            rootView: DockContentView(presentation: presentation)
         )
         hostingView.frame = NSRect(origin: .zero, size: size)
         hostingView.autoresizingMask = [.width, .height]
-        panel.contentView = hostingView
+
+        let clickOverlay = DockClickOverlay(frame: NSRect(origin: .zero, size: size))
+        clickOverlay.autoresizingMask = [.width, .height]
+        clickOverlay.onClick = onOpenPanel
+        clickOverlay.setAccessibilityElement(true)
+        clickOverlay.setAccessibilityRole(.button)
+        clickOverlay.setAccessibilityLabel(presentation.accessibilityDescription)
+        clickOverlay.setAccessibilityHelp(UIStrings.dockOpenPanelHint)
+
+        let container = NSView(frame: NSRect(origin: .zero, size: size))
+        container.addSubview(hostingView)
+        container.addSubview(clickOverlay)
+        panel.contentView = container
         panel.setContentSize(size)
         panel.setAccessibilityLabel(presentation.accessibilityDescription)
         panel.setAccessibilityHelp(UIStrings.dockOpenPanelHint)
         self.panel = panel
         self.hostingView = hostingView
+        self.clickOverlay = clickOverlay
         self.presentation = presentation
     }
 
@@ -133,11 +144,9 @@ final class DockPanelController {
             return
         }
         presentation = updated
-        hostingView.rootView = DockContentView(
-            presentation: updated,
-            onOpen: onOpenPanel
-        )
+        hostingView.rootView = DockContentView(presentation: updated)
         panel.setAccessibilityLabel(updated.accessibilityDescription)
+        clickOverlay.setAccessibilityLabel(updated.accessibilityDescription)
     }
 
     /// Places the dock at the right edge of the screen the app is working on,
@@ -150,12 +159,20 @@ final class DockPanelController {
         guard let frame = DockFrameCalculator.frame(
             for: DockFrameCalculator.defaultSize,
             in: visibleFrames,
-            on: NSScreen.main?.visibleFrame
+            on: preferredScreen?.visibleFrame
         ) else {
             panel.orderOut(nil)
             return
         }
         panel.setFrame(frame, display: true)
+    }
+
+    /// The dock belongs on the display where the user just dropped the panel.
+    /// The pointer is at that edge on release; fall back to the main screen.
+    private var preferredScreen: NSScreen? {
+        let pointer = NSEvent.mouseLocation
+        return NSScreen.screens.first { $0.frame.contains(pointer) }
+            ?? NSScreen.main
     }
 
     private func startObservingSystemChanges() {
@@ -198,11 +215,27 @@ final class DockPanelController {
     }
 }
 
-/// A click on an inactive accessory app must reach the dock on the first
-/// mouse-down, so the hosting view accepts first mouse.
-private final class DockHostingView: NSHostingView<DockContentView> {
+/// A transparent hit target above the SwiftUI dock. It accepts the first mouse
+/// even while the app is inactive, and exposes the whole dock as one
+/// accessibility button.
+private final class DockClickOverlay: NSView {
+    var onClick: (() -> Void)?
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        onClick?()
+        return true
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
     }
 }
 

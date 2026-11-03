@@ -44,4 +44,27 @@ struct BalanceProviderErrorTests {
     func unrecognizedErrorsClassifyAsUnknown() {
         #expect(BalanceProviderError.classify(NSError(domain: "test", code: 1)) == .unknown)
     }
+
+    @Test
+    func keychainErrorsBecomeReadableAuthenticationDetails() {
+        let classified = BalanceProviderError.classify(
+            CredentialStoreError.interactionNotAllowed
+        )
+
+        #expect(classified.category == .authentication)
+        #expect(
+            classified.userMessage(for: .deepSeek)
+                == CredentialStoreError.interactionNotAllowed.localizedDescription
+        )
+    }
+
+    @Test
+    func unknownHTTPStatusesAreIncludedInTheMessage() {
+        let error = BalanceProviderError(.unknown, statusCode: 404)
+
+        #expect(
+            error.userMessage(for: .deepSeek)
+                == UIStrings.unknownErrorWithStatus(404)
+        )
+    }
 }

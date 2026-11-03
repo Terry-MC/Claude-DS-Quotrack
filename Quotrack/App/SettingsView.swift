@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The full Settings surface: the Account list, the app-wide Polling
 /// Interval, the Launch at Login toggle, and why unsupported and deferred
-/// Providers are absent. Account editing includes the per-Account low-Balance
-/// threshold, which defaults to off.
+/// Providers are absent. Account editing includes the per-Account thresholds.
 @MainActor
 struct SettingsView: View {
     let manager: AccountManager
@@ -19,18 +18,18 @@ struct SettingsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 16) {
+                pageHeader
                 accountsSection
-                Divider()
                 pollingSection
-                Divider()
                 launchAtLoginSection
-                Divider()
-                unsupportedProvidersSection
+                supportSection
             }
-            .padding(20)
+            .padding(22)
         }
-        .frame(minWidth: 520, minHeight: 520)
+        .frame(minWidth: 560, minHeight: 640)
+        .scrollIndicators(.never)
+        .quotrackWindowBackground()
         .onAppear {
             settings.refreshLoginItemStatus()
         }
@@ -63,24 +62,61 @@ struct SettingsView: View {
         }
     }
 
+    private var pageHeader: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("设置")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(UITheme.textPrimary)
+            Text("管理账户、阈值与轮询")
+                .font(.system(size: 10.5))
+                .tracking(0.3)
+                .foregroundStyle(UITheme.textTertiary)
+        }
+        .padding(.horizontal, 2)
+    }
+
     private var accountsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(UIStrings.settingsAccountsTitle)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                sectionTitle(UIStrings.settingsAccountsTitle)
+                Spacer()
+                Button(UIStrings.addAccount) {
+                    errorMessage = nil
+                    sheet = .add
+                }
+                .buttonStyle(AccentButtonStyle())
+            }
 
             if manager.accounts.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(UIStrings.emptyAccountsTitle)
-                        .font(.headline)
-                    Text(UIStrings.emptyAccountsDescription)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(UITheme.textSecondary)
+                            .frame(width: 34, height: 34)
+                            .background(
+                                UITheme.control,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(UIStrings.emptyAccountsTitle)
+                                .font(.system(size: 12.5, weight: .semibold))
+                                .foregroundStyle(UITheme.textPrimary)
+                            Text(UIStrings.emptyAccountsDescription)
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(UITheme.textSecondary)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                .padding(14)
+                .background(
+                    Color.black.opacity(0.16),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
             } else {
                 VStack(spacing: 0) {
-                    ForEach(manager.accounts) { account in
+                    ForEach(Array(manager.accounts.enumerated()), id: \.element.id) { index, account in
                         AccountRow(
                             account: account,
                             onEdit: { sheet = .edit(account) },
@@ -89,56 +125,61 @@ struct SettingsView: View {
                                 accountPendingDeletion = account
                             }
                         )
-                        if account.id != manager.accounts.last?.id {
-                            Divider()
+                        if index < manager.accounts.count - 1 {
+                            Rectangle()
+                                .fill(UITheme.hairlineSubtle)
+                                .frame(height: 1)
+                                .padding(.leading, 44)
                         }
                     }
                 }
-                .padding(.horizontal, 12)
-                .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
             }
 
-            HStack(spacing: 12) {
-                Button(UIStrings.addAccount) {
-                    errorMessage = nil
-                    sheet = .add
-                }
-                Spacer(minLength: 0)
-                if let errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(UITheme.red)
+                    .lineLimit(2)
             }
         }
+        .glassCard(padding: 16)
     }
 
     private var pollingSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             sectionTitle(UIStrings.settingsPollingTitle)
-            Stepper(
-                value: Binding(
-                    get: { settings.pollingIntervalMinutes },
-                    set: { settings.setPollingInterval(minutes: $0) }
-                ),
-                in: AppSettings.pollingIntervalRange
-            ) {
-                Text("\(UIStrings.pollingIntervalLabel)：\(settings.pollingIntervalMinutes) \(UIStrings.minutesUnit)")
+            HStack(spacing: 12) {
+                Text(UIStrings.pollingIntervalLabel)
+                    .font(.system(size: 12))
+                    .foregroundStyle(UITheme.textSecondary)
+                Spacer()
+                Stepper(
+                    value: Binding(
+                        get: { settings.pollingIntervalMinutes },
+                        set: { settings.setPollingInterval(minutes: $0) }
+                    ),
+                    in: AppSettings.pollingIntervalRange
+                ) {
+                    Text("\(settings.pollingIntervalMinutes) \(UIStrings.minutesUnit)")
+                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                        .foregroundStyle(UITheme.textPrimary)
+                }
+                .fixedSize()
             }
             Text(UIStrings.pollingIntervalHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10))
+                .foregroundStyle(UITheme.textTertiary)
             if let settingsErrorMessage = settings.settingsErrorMessage {
                 Text(settingsErrorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(UITheme.red)
             }
         }
+        .glassCard(padding: 16)
     }
 
     private var launchAtLoginSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             sectionTitle(UIStrings.settingsLaunchAtLoginTitle)
             Toggle(
                 UIStrings.launchAtLoginLabel,
@@ -147,46 +188,59 @@ struct SettingsView: View {
                     set: { settings.setLaunchAtLogin($0) }
                 )
             )
+            .toggleStyle(.switch)
+            .font(.system(size: 12))
+            .foregroundStyle(UITheme.textPrimary)
+            .tint(UITheme.accentStart)
+
             Text(UIStrings.launchAtLoginHint)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10))
+                .foregroundStyle(UITheme.textTertiary)
+
             if settings.requiresApproval {
                 HStack(spacing: 8) {
                     Text(UIStrings.launchAtLoginRequiresApproval)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                        .font(.system(size: 10))
+                        .foregroundStyle(UITheme.yellow)
                         .fixedSize(horizontal: false, vertical: true)
                     Button(UIStrings.openLoginItemsSettings) {
                         settings.openLoginItemsSettings()
                     }
-                    .controlSize(.small)
+                    .buttonStyle(SecondaryButtonStyle())
                 }
             }
             if let loginItemErrorMessage = settings.loginItemErrorMessage {
                 Text(loginItemErrorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(UITheme.red)
             }
         }
+        .glassCard(padding: 16)
     }
 
-    private var unsupportedProvidersSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var supportSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
             sectionTitle(UIStrings.settingsUnsupportedTitle)
             Text(UIStrings.unsupportedProvidersExplanation)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5))
+                .foregroundStyle(UITheme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            Rectangle()
+                .fill(UITheme.hairlineSubtle)
+                .frame(height: 1)
             Text(UIStrings.settingsDeferredIntegrationsExplanation)
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5))
+                .foregroundStyle(UITheme.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        .glassCard(padding: 16)
     }
 
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
-            .font(.headline)
+            .font(.system(size: 11, weight: .semibold))
+            .tracking(0.4)
+            .foregroundStyle(UITheme.textSecondary)
     }
 
     private func deletePendingAccount() {
@@ -228,32 +282,48 @@ private struct AccountRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(account.label)
-                    .font(.headline)
+        HStack(spacing: 10) {
+            ProviderMark(provider: account.provider, size: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(account.label)
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(UITheme.textPrimary)
+                    TypeTag(
+                        text: account.kind.typeTagText,
+                        style: account.kind.typeTagStyle
+                    )
+                    if !account.provider.isSupported {
+                        TypeTag(text: UIStrings.unsupportedProviderState, style: .experimental)
+                    }
+                }
                 Text(detailText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.textTertiary)
+                    .lineLimit(2)
             }
 
             Spacer(minLength: 12)
 
             if account.provider.isSupported {
-                Button("编辑", action: onEdit)
+                GlassIconButton(systemName: "pencil", help: "编辑", size: 24, action: onEdit)
             }
-            Button("删除", role: .destructive, action: onDelete)
+            GlassIconButton(
+                systemName: "trash",
+                help: "删除",
+                tint: UITheme.red.opacity(0.8),
+                size: 24,
+                action: onDelete
+            )
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 9)
     }
 
     private var detailText: String {
-        var parts = [account.provider.displayName, account.kind.displayName]
+        var parts = [account.provider.displayName]
         if let region = account.region {
             parts.append(region.displayName)
-        }
-        if !account.provider.isSupported {
-            parts.append(UIStrings.unsupportedProviderState)
         }
 
         let thresholds = account.thresholds

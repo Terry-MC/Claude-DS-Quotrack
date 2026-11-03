@@ -22,6 +22,8 @@ enum UIStrings {
     // Typed error detail
     static let authenticationError = "认证失败，请检查 API 密钥。"
     static let regionAuthenticationError = "认证失败，请检查 API 密钥，并确认所选区域与凭证匹配。"
+    static let kimiCodeAuthenticationError = "Kimi Code 认证失败：请确认密钥来自 Kimi Code Console（sk-kimi-…），并选择与账号一致的国内/国际区域。"
+    static let kimiCodeCredentialRequired = "Kimi Code 订阅需要以 sk-kimi 开头的 Kimi Code API key；当前 sk-… 密钥不是订阅密钥。若它是 Moonshot 开放平台密钥，请改用“充值”账户类型。"
     static let permissionError = "权限不足，请检查密钥权限。"
     static let openRouterManagementKeyError = "权限不足，OpenRouter 需要管理密钥。"
     static let networkError = "网络错误，请检查网络连接。"
@@ -29,6 +31,9 @@ enum UIStrings {
     static let malformedResponseError = "响应格式异常，无法解析。"
     static let unsupportedAccountKindError = "该账户类型暂不支持。"
     static let unknownError = "未知错误，请稍后重试。"
+    static func unknownErrorWithStatus(_ statusCode: Int) -> String {
+        "未知错误（HTTP \(statusCode)），请稍后重试。"
+    }
 
     // Health and thresholds
     static let healthNormal = "正常"
@@ -62,8 +67,8 @@ enum UIStrings {
     static let unsupportedProviderState = "不再支持"
 
     // Provider cards and grouped sections
-    static let providerBalanceSectionTitle = "余额"
-    static let providerQuotaSectionTitle = "额度"
+    static let providerBalanceSectionTitle = "充值"
+    static let providerQuotaSectionTitle = "订阅"
     static let providerBalanceTotalLabel = "合计"
     static let providerRefresh = "刷新此厂商"
     static let expandProviderHint = "展开厂商"

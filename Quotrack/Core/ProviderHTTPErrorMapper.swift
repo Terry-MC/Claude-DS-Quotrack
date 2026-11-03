@@ -12,10 +12,25 @@ enum ProviderHTTPErrorMapper {
         now: Date
     ) -> BalanceProviderError {
         switch response.statusCode {
-        case 401: unauthorized
-        case 403: .permission
-        case 429: .rateLimit(retryAfter: retryAfter(from: response, now: now))
-        default: .unknown
+        case 401:
+            BalanceProviderError(
+                unauthorized.category,
+                retryAfter: unauthorized.retryAfter,
+                statusCode: 401
+            )
+        case 403:
+            BalanceProviderError(.permission, statusCode: 403)
+        case 429:
+            BalanceProviderError(
+                .rateLimit,
+                retryAfter: retryAfter(from: response, now: now),
+                statusCode: 429
+            )
+        default:
+            BalanceProviderError(
+                .unknown,
+                statusCode: response.statusCode
+            )
         }
     }
 

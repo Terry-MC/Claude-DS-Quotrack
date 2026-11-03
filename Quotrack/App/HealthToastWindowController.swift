@@ -6,7 +6,7 @@ import SwiftUI
 /// aggregated content, dismisses itself, and opens the panel on click.
 @MainActor
 final class HealthToastWindowController: HealthToastPresenting {
-    private static let contentSize = NSSize(width: 330, height: 116)
+    private static let contentSize = NSSize(width: 340, height: 132)
     private static let visibleDuration: Duration = .seconds(8)
 
     private var panel: NSPanel?
@@ -87,23 +87,40 @@ private struct HealthToastView: View {
     let onOpen: () -> Void
     let onDismiss: () -> Void
 
-    private static let width: CGFloat = 330
+    private static let width: CGFloat = 340
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        HStack(alignment: .top, spacing: 9) {
             Button(action: onOpen) {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: symbolName)
-                        .font(.title3)
-                        .foregroundStyle(tint)
+                HStack(alignment: .top, spacing: 11) {
+                    Text("Q")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(
+                            UITheme.accentGradient,
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
+                        .shadow(color: UITheme.accentEnd.opacity(0.30), radius: 8, y: 3)
                         .accessibilityHidden(true)
 
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("QUOTRACK")
+                                .tracking(0.5)
+                            Spacer(minLength: 8)
+                            Text("现在")
+                        }
+                        .font(.system(size: 9))
+                        .foregroundStyle(UITheme.textTertiary)
+
                         Text(content.title)
-                            .font(.headline)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(UITheme.textPrimary)
                         Text(content.body)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(UITheme.textSecondary)
                             .lineLimit(4)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -118,40 +135,52 @@ private struct HealthToastView: View {
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(UITheme.textTertiary)
+                    .frame(width: 20, height: 20)
+                    .background(
+                        UITheme.control,
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(UIStrings.dismissNotificationToast)
         }
-        .padding(12)
+        .padding(13)
         .frame(width: Self.width, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(.secondary.opacity(0.25))
+        .background(
+            shape
+                .fill(.ultraThinMaterial)
+                .overlay(shape.fill(UITheme.panelTint))
         )
-    }
-
-    private var symbolName: String {
-        switch content.severity {
-        case .critical:
-            "exclamationmark.octagon.fill"
-        case .warning:
-            "exclamationmark.triangle.fill"
-        case .normal, .unset:
-            "checkmark.circle.fill"
+        .overlay(alignment: .leading) {
+            Rectangle()
+                .fill(tint.opacity(0.8))
+                .frame(width: 2)
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 16,
+                        bottomLeadingRadius: 16,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 0,
+                        style: .continuous
+                    )
+                )
         }
+        .overlay(
+            shape.strokeBorder(UITheme.hairline, lineWidth: 1)
+        )
+        .preferredColorScheme(.dark)
     }
 
     private var tint: Color {
         switch content.severity {
         case .critical:
-            .red
+            UITheme.red
         case .warning:
-            .orange
+            UITheme.yellow
         case .normal, .unset:
-            .green
+            UITheme.green
         }
     }
 }

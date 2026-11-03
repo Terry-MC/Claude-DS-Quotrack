@@ -13,6 +13,38 @@ struct OnboardingTests {
     }
 
     @Test
+    func openingFromAProviderCardPreselectsThatProvider() throws {
+        let manager = AccountManager(
+            store: InMemorySnapshotStore(),
+            credentialStore: InMemoryCredentialStore()
+        )
+        let tester = RecordingConnectionTester(
+            balanceResult: .success(makeOnboardingSnapshot())
+        )
+
+        let deepSeek = OnboardingModel(
+            accountManager: manager,
+            connectionTester: tester,
+            initialProvider: .deepSeek
+        )
+        #expect(deepSeek.selectedProvider == .deepSeek)
+        #expect(deepSeek.selectedKind == .balance)
+        #expect(deepSeek.step == .details)
+
+        let moonshot = OnboardingModel(
+            accountManager: manager,
+            connectionTester: tester,
+            initialProvider: .moonshot
+        )
+        #expect(moonshot.selectedProvider == .moonshot)
+        #expect(moonshot.selectedKind == .balance)
+        #expect(moonshot.step == .region)
+
+        moonshot.back()
+        #expect(moonshot.step == .provider)
+    }
+
+    @Test
     func selectingOpenRouterWarnsAboutTheManagementKeyBeforeSaving() throws {
         let context = makeContext()
 

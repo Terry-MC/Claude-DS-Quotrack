@@ -6,7 +6,7 @@ import Foundation
 /// display and how to pull it back inside one.
 enum PanelFrameMemory {
     /// The autosave key AppKit uses to persist the panel frame across launches.
-    static let autosaveName = "QuotrackPanel"
+    static let autosaveName = "QuotrackPanelV2"
 
     /// Returns the saved frame clamped inside the visible frame of the display
     /// it belongs to, or `nil` when it is no longer on any visible display.

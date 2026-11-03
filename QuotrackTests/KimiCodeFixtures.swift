@@ -132,6 +132,63 @@ enum KimiCodeFixtures {
     }
     """
 
+    /// Newer Kimi Code quota model: weekly/monthly percentage pools alongside
+    /// the legacy 5-hour count window.
+    static let ratioPools = """
+    {
+      "limits": [
+        {
+          "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
+          "detail": {
+            "limit": "200",
+            "used": "0",
+            "remaining": "200",
+            "resetTime": "2026-02-07T12:32:50.757941Z"
+          }
+        }
+      ],
+      "usages": {
+        "limit_5h": {
+          "used_ratio": 0,
+          "reset_time": "2026-02-07T12:32:50.757941Z"
+        },
+        "limit_7d": {
+          "used_ratio": 0.0844,
+          "reset_time": "2026-02-11T17:32:50.757941Z"
+        },
+        "limit_month_total": {
+          "used_ratio": 0.2,
+          "reset_time": "2026-03-01T00:00:00Z"
+        }
+      }
+    }
+    """
+
+    static let ratioPoolsWithoutWeekly = """
+    {
+      "usages": {
+        "limit_5h": { "used_ratio": 0 },
+        "limit_month_total": {
+          "used_ratio": 8.44,
+          "reset_time": "2026-03-01T00:00:00Z"
+        }
+      }
+    }
+    """
+
+    static let ratioPoolsEnvelope = """
+    {
+      "data": {
+        "usages": {
+          "limit_7d": {
+            "used_ratio": "0.0844",
+            "reset_time": "2026-02-11T17:32:50.757941Z"
+          }
+        }
+      }
+    }
+    """
+
     static let malformed = """
     { "unexpected": true }
     """

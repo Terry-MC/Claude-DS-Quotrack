@@ -26,7 +26,28 @@ struct AccountCreator {
         } catch is AccountThresholdError {
             throw AccountManagerError.invalidThreshold
         }
-        let testedSnapshot = try await connectionTester.testConnection(draft)
+        // Pasted credentials commonly carry a trailing newline or spaces.
+        // Normalize once so the test and every later poll send the same key.
+        let credential = draft.credential.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        guard !credential.isEmpty else {
+            throw AccountManagerError.missingCredential
+        }
+        if draft.provider == .moonshot,
+           draft.kind == .subscription,
+           !credential.hasPrefix("sk-kimi") {
+            throw AccountManagerError.kimiCodeCredentialRequired
+        }
+        let normalizedDraft = AccountDraft(
+            provider: draft.provider,
+            region: draft.region,
+            label: draft.label,
+            credential: credential,
+            kind: draft.kind,
+            currency: draft.currency
+        )
+        let testedSnapshot = try await connectionTester.testConnection(normalizedDraft)
         let resolvedCurrency = draft.kind == .balance
             ? (draft.currency ?? testedSnapshot.balanceSnapshot?.balance.currency)
             : nil
@@ -34,7 +55,7 @@ struct AccountCreator {
             provider: draft.provider,
             region: draft.region,
             label: draft.label,
-            credential: draft.credential,
+            credential: credential,
             kind: draft.kind,
             currency: resolvedCurrency
         )

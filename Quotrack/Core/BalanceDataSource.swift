@@ -20,7 +20,7 @@ extension BalanceDataSource {
     ) -> BalanceDataSource {
         switch mode {
         case .mock:
-            return .mock(now: now)
+            return .mock(now: now, store: store)
         case .live:
             return BalanceDataSource(
                 accounts: store?.loadAccounts() ?? [],
@@ -33,22 +33,31 @@ extension BalanceDataSource {
     }
 
     /// Mock mode: every addable Provider routes to the deterministic mock
-    /// adapter, and the Accounts come from the same fixture set. Legacy
+    /// adapter. When a store is supplied, the panel reads the same Accounts
+    /// Settings edits; otherwise it falls back to the fixture list. Legacy
     /// SiliconFlow fixtures stay in the list to exercise the unsupported state.
-    static func mock(now: Date) -> BalanceDataSource {
+    static func mock(
+        now: Date,
+        store: (any SnapshotStore)? = nil
+    ) -> BalanceDataSource {
         let fixtures = MockFixtures.standard(now: now)
         let quotaFixtures = MockFixtures.quotaFixtures(now: now)
         let mockProvider = BalanceProviderAdapter(
-            provider: MockBalanceProvider(fixtures: fixtures)
+            provider: MockBalanceProvider(
+                fixtures: fixtures,
+                fallbackFetchedAt: now
+            )
         )
         var adapters: [ProviderAdapterKey: any AccountProvider] = [:]
         for provider in Provider.addableCases {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
         }
         adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
-            MockQuotaProvider(fixtures: quotaFixtures)
+            MockQuotaProvider(fixtures: quotaFixtures, now: now)
+        let accounts = store?.loadAccounts()
+            ?? fixtures.map(\.account) + quotaFixtures.map(\.account)
         return BalanceDataSource(
-            accounts: fixtures.map(\.account) + quotaFixtures.map(\.account),
+            accounts: accounts,
             provider: ProviderRegistry(adapters: adapters)
         )
     }

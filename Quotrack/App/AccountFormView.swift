@@ -58,101 +58,197 @@ struct AccountFormView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title)
-                .font(.title3.weight(.semibold))
-
-            Form {
-                if case .add = mode {
-                    Picker("厂商", selection: providerSelection) {
-                        ForEach(Provider.addableCases, id: \.self) { provider in
-                            Text(provider.displayName).tag(provider)
-                        }
+        VStack(spacing: 0) {
+            header
+            Rectangle()
+                .fill(UITheme.hairline)
+                .frame(height: 1)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    identityCard
+                    credentialCard
+                    thresholdCard
+                    if case .edit = mode {
+                        Text("已保存的凭证不会显示。留空则保持现有凭证不变。")
+                            .font(.system(size: 10))
+                            .foregroundStyle(UITheme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                }
+                .padding(20)
+            }
+            .scrollIndicators(.never)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(UITheme.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 10)
+            }
+
+            Rectangle()
+                .fill(UITheme.hairline)
+                .frame(height: 1)
+            footer
+        }
+        .frame(width: 480)
+        .quotrackWindowBackground()
+    }
+
+    private var header: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(UITheme.textPrimary)
+                Text(
+                    isEditing
+                        ? "修改标签、凭证或健康阈值"
+                        : "连接测试通过后才会保存账户"
+                )
+                .font(.system(size: 10.5))
+                .foregroundStyle(UITheme.textTertiary)
+            }
+            Spacer(minLength: 8)
+            ProviderMark(provider: provider, size: 30)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+    }
+
+    private var identityCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            formSectionTitle("账户")
+            if isEditing {
+                LabeledValue(title: "厂商", value: provider.displayName)
+            } else {
+                LabeledMenu(title: "厂商", selection: providerSelection) {
+                    ForEach(Provider.addableCases, id: \.self) { provider in
+                        Text(provider.displayName).tag(provider)
+                    }
+                }
+            }
+
+            if provider.supportsRegion {
+                if isEditing {
+                    LabeledValue(title: "区域", value: region.displayName)
                 } else {
-                    LabeledContent("厂商", value: provider.displayName)
-                }
-
-                if provider.supportsRegion {
-                    if case .add = mode {
-                        Picker("区域", selection: regionSelection) {
-                            ForEach(Region.allCases, id: \.self) { region in
-                                Text(region.displayName).tag(region)
-                            }
+                    LabeledMenu(title: "区域", selection: regionSelection) {
+                        ForEach(Region.allCases, id: \.self) { region in
+                            Text(region.displayName).tag(region)
                         }
-                    } else {
-                        LabeledContent("区域", value: region.displayName)
                     }
                 }
+            }
 
-                if case .add = mode, provider.supportedKinds.count > 1 {
+            if !isEditing, provider.supportedKinds.count > 1 {
+                VStack(alignment: .leading, spacing: 5) {
+                    fieldLabel(UIStrings.accountKindLabel)
                     Picker(UIStrings.accountKindLabel, selection: $kind) {
                         ForEach(provider.supportedKinds, id: \.self) { kind in
                             Text(kind.displayName).tag(kind)
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                     .onChange(of: kind) { _, newKind in
                         applyDefaults(for: newKind)
                     }
-                } else {
-                    LabeledContent(UIStrings.accountKindLabel, value: kind.displayName)
                 }
-
-                TextField("标签", text: $label)
-                SecureField(credentialFieldLabel, text: $credential)
-                if let warning = AccountFormPresentation.credentialWarning(
-                    for: provider,
-                    kind: kind
-                ) {
-                    Text(warning)
-                        .font(.caption)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                Section(UIStrings.healthThresholdsTitle) {
-                    TextField(warningFieldLabel, text: $warningThresholdText)
-                    TextField(criticalFieldLabel, text: $criticalThresholdText)
-                    Text(thresholdHint)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    if kind == .balance {
-                        Text(UIStrings.thresholdCurrencyHint)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .formStyle(.grouped)
-
-            if case .edit = mode {
-                Text("已保存的凭证不会显示。留空则保持现有凭证不变。")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            HStack {
-                Spacer()
-                Button("取消", role: .cancel) {
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-                Button(saveButtonTitle, action: save)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(
-                        label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            || isSaving
-                    )
+            } else {
+                LabeledValue(
+                    title: UIStrings.accountKindLabel,
+                    value: kind.displayName
+                )
             }
         }
-        .padding(20)
-        .frame(width: 440)
+        .glassCard(padding: 14)
+    }
+
+    private var credentialCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            formSectionTitle("凭证")
+            ThemedTextField(title: "标签", text: $label)
+            ThemedTextField(
+                title: credentialFieldLabel,
+                text: $credential,
+                isSecure: true
+            )
+            if let warning = AccountFormPresentation.credentialWarning(
+                for: provider,
+                kind: kind
+            ) {
+                Text(warning)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.yellow)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if kind == .subscription,
+               !credential.isEmpty,
+               !credential.hasPrefix("sk-kimi") {
+                Text(UIStrings.kimiCodeCredentialRequired)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.yellow)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .glassCard(padding: 14)
+    }
+
+    private var thresholdCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            formSectionTitle(UIStrings.healthThresholdsTitle)
+            HStack(spacing: 10) {
+                ThemedTextField(
+                    title: warningFieldLabel,
+                    text: $warningThresholdText
+                )
+                ThemedTextField(
+                    title: criticalFieldLabel,
+                    text: $criticalThresholdText
+                )
+            }
+            Text(thresholdHint)
+                .font(.system(size: 10))
+                .foregroundStyle(UITheme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if kind == .balance {
+                Text(UIStrings.thresholdCurrencyHint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.textTertiary)
+            }
+        }
+        .glassCard(padding: 14)
+    }
+
+    private var footer: some View {
+        HStack {
+            Spacer()
+            Button("取消", role: .cancel) {
+                dismiss()
+            }
+            .buttonStyle(SecondaryButtonStyle())
+            .keyboardShortcut(.cancelAction)
+            Button(saveButtonTitle, action: save)
+                .buttonStyle(AccentButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                .disabled(
+                    label.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || isSaving
+                )
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
+    }
+
+    private var isEditing: Bool {
+        if case .edit = mode {
+            return true
+        }
+        return false
     }
 
     private var providerSelection: Binding<Provider> {
@@ -278,7 +374,8 @@ struct AccountFormView: View {
         } catch {
             errorMessage = ConnectionErrorMessage.text(
                 for: error,
-                provider: draft.provider
+                provider: draft.provider,
+                kind: draft.kind
             )
         }
     }
@@ -317,4 +414,105 @@ struct AccountFormView: View {
             return nil
         }
     }
+}
+
+private struct LabeledValue: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            fieldLabel(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.system(size: 11.5))
+                .foregroundStyle(UITheme.textPrimary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(
+            UITheme.control.opacity(0.55),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+}
+
+private struct LabeledMenu<SelectionValue: Hashable, Content: View>: View {
+    let title: String
+    @Binding var selection: SelectionValue
+    let content: Content
+
+    init(
+        title: String,
+        selection: Binding<SelectionValue>,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.title = title
+        self._selection = selection
+        self.content = content()
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            fieldLabel(title)
+            Spacer(minLength: 12)
+            Picker(title, selection: $selection) {
+                content
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(
+            UITheme.control,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+}
+
+private struct ThemedTextField: View {
+    let title: String
+    @Binding var text: String
+    var isSecure = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            fieldLabel(title)
+            Group {
+                if isSecure {
+                    SecureField(title, text: $text)
+                } else {
+                    TextField(title, text: $text)
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 11.5))
+            .foregroundStyle(UITheme.textPrimary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(
+                UITheme.control,
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(UITheme.hairline, lineWidth: 1)
+            )
+        }
+    }
+}
+
+private func formSectionTitle(_ title: String) -> some View {
+    Text(title)
+        .font(.system(size: 10.5, weight: .semibold))
+        .tracking(0.5)
+        .foregroundStyle(UITheme.textSecondary)
+}
+
+private func fieldLabel(_ title: String) -> some View {
+    Text(title)
+        .font(.system(size: 10))
+        .foregroundStyle(UITheme.textTertiary)
 }

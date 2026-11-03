@@ -24,9 +24,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dataSourceMode = LaunchOptions
             .parse(arguments: ProcessInfo.processInfo.arguments)
             .dataSourceMode
-        let store = FileSnapshotStore.applicationSupport()
+
+        // Mock mode is a fully isolated sandbox: Settings, the panel, and the
+        // monitor share fixture Accounts through an ephemeral store, and no
+        // mock credential ever touches the real Keychain.
+        let store: any SnapshotStore
+        let settingsStore: any SettingsStore
+        let credentialStore: any CredentialStore
+        switch dataSourceMode {
+        case .mock:
+            store = EphemeralSnapshotStore(
+                accounts: MockFixtures.accounts(now: Date())
+            )
+            settingsStore = EphemeralSettingsStore()
+            credentialStore = EphemeralCredentialStore()
+        case .live:
+            let fileStore = FileSnapshotStore.applicationSupport()
+            store = fileStore
+            settingsStore = FileSettingsStore(directoryURL: fileStore.directoryURL)
+            credentialStore = KeychainCredentialStore()
+        }
         self.store = store
-        let credentialStore = KeychainCredentialStore()
         self.credentialStore = credentialStore
         let transport = URLSessionTransport()
         self.transport = transport
@@ -36,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         self.accountManager = accountManager
         let settingsModel = SettingsModel(
-            store: FileSettingsStore(directoryURL: store.directoryURL),
+            store: settingsStore,
             loginItemService: SMAppServiceLoginItemService()
         )
         self.settingsModel = settingsModel
@@ -57,27 +75,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.pollingInterval = interval
         }
 
-        let menuBarController = MenuBarController(
-            monitor: monitor,
-            settings: settingsModel,
-            onAddAccount: { [weak self] in self?.showOnboarding() }
-        )
-        menuBarController.onOpenSettings = { [weak self] in
-            self?.showSettings()
-        }
-        menuBarController.onSwitchDataSource = { [weak self] in
-            self?.toggleDataSource()
-        }
-        self.menuBarController = menuBarController
-
-        // The dock stays visible while the main panel is hidden. Clicking it
-        // reveals the panel without activating the app; quitting removes it in
-        // `applicationWillTerminate`.
+        // The dock appears only after the user drags the floating panel to
+        // the right edge. Clicking it restores the panel; it is not a
+        // permanent second window.
         let dockPanelController = DockPanelController(monitor: monitor) { [weak self] in
             self?.menuBarController?.showPanel()
         }
         self.dockPanelController = dockPanelController
-        dockPanelController.show()
+
+        let menuBarController = MenuBarController(
+            monitor: monitor,
+            settings: settingsModel,
+            onAddAccount: { [weak self] provider in
+                self?.showOnboarding(provider: provider)
+            },
+            onOpenSettings: { [weak self] in self?.showSettings() },
+            onPanelDocked: { [weak dockPanelController] in
+                dockPanelController?.show()
+            },
+            onPanelShown: { [weak dockPanelController] in
+                dockPanelController?.hide()
+            }
+        )
+        menuBarController.onSwitchDataSource = { [weak self] in
+            self?.toggleDataSource()
+        }
+        self.menuBarController = menuBarController
 
         // Health notifications are computed once per completed poll. A system
         // notification is used when permission is granted; a denied prompt
@@ -138,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindowController?.show()
     }
 
-    private func showOnboarding() {
+    private func showOnboarding(provider: Provider? = nil) {
         if let onboardingWindowController, onboardingWindowController.isVisible {
             return
         }
@@ -147,7 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let model = OnboardingModel(
             accountManager: accountManager,
-            connectionTester: makeConnectionTester()
+            connectionTester: makeConnectionTester(),
+            initialProvider: provider
         )
         let controller = OnboardingWindowController(model: model) { [weak self] _ in
             guard let self else {

@@ -258,6 +258,65 @@ struct MockModeTests {
     }
 
     @Test
+    func storeBackedMockModeMatchesFixtureIDsForANewLaunch() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let accounts = MockFixtures.accounts(now: now)
+        let store = EphemeralSnapshotStore(accounts: accounts)
+
+        let source = BalanceDataSource.make(mode: .mock, now: now, store: store)
+        let monitor = LiveBalanceMonitor(
+            dataSource: source,
+            store: nil,
+            pollingInterval: 300,
+            now: { now }
+        )
+        await monitor.refresh()
+
+        #expect(source.accounts == accounts)
+        #expect(accounts.count == 19)
+        let personal = try #require(
+            monitor.rows.first { $0.account.label == "个人账户" }
+        )
+        #expect(
+            personal.balanceSnapshot?.balance.amount
+                == Decimal(string: "128.40")
+        )
+        let quota = try #require(
+            monitor.rows.first { $0.account.label == "Kimi Code 预警" }
+        )
+        #expect(quota.quotaSnapshot?.remaining == 15)
+    }
+
+    @Test
+    func mockModeCoversAccountsAddedDuringTheSession() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let store = EphemeralSnapshotStore(accounts: MockFixtures.accounts(now: now))
+        let added = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            label: "新增账户",
+            warningThreshold: 5
+        )
+        try store.saveAccounts(store.loadAccounts() + [added])
+
+        let source = BalanceDataSource.make(mode: .mock, now: now, store: store)
+        let monitor = LiveBalanceMonitor(
+            dataSource: source,
+            store: nil,
+            pollingInterval: 300,
+            now: { now }
+        )
+        await monitor.refresh()
+
+        let row = try #require(monitor.rows.first { $0.id == added.id })
+        #expect(row.status == .fresh)
+        #expect(
+            row.balanceSnapshot?.balance
+                == Balance(amount: Decimal(string: "42.50")!, currency: .cny)
+        )
+    }
+
+    @Test
     func mockDataSourceProvidesBreakdownsForExpandedRowsWhenAvailable() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let monitor = LiveBalanceMonitor(
