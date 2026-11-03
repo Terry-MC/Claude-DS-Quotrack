@@ -18,6 +18,14 @@ struct MenuBarStatusPresentationTests {
     }
 
     @Test
+    func criticalStateShowsACriticalIconAndDescription() {
+        let viewState = MenuBarStatusPresentation.viewState(for: .critical)
+
+        #expect(viewState.symbolName == "exclamationmark.circle.fill")
+        #expect(viewState.accessibilityDescription == UIStrings.menuBarCriticalDescription)
+    }
+
+    @Test
     func errorStateShowsAnErrorIconAndDescription() {
         let viewState = MenuBarStatusPresentation.viewState(for: .error)
 
@@ -30,6 +38,7 @@ struct MenuBarStatusPresentationTests {
         let viewStates = [
             MenuBarStatusPresentation.viewState(for: .normal),
             MenuBarStatusPresentation.viewState(for: .warning),
+            MenuBarStatusPresentation.viewState(for: .critical),
             MenuBarStatusPresentation.viewState(for: .error),
         ]
 

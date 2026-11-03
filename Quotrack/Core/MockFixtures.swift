@@ -37,7 +37,7 @@ enum MockFixtures {
                 currency: .cny,
                 age: 60,
                 now: now,
-                lowBalanceThreshold: Decimal(string: "5.00")!
+                warningThreshold: Decimal(string: "5.00")!
             ),
             fixture(
                 provider: .moonshot,
@@ -108,13 +108,13 @@ enum MockFixtures {
         age: TimeInterval,
         now: Date,
         breakdown: [BalanceBreakdownItem]? = nil,
-        lowBalanceThreshold: Decimal? = nil
+        warningThreshold: Decimal? = nil
     ) -> MockFixture {
         let account = Account(
             id: UUID(),
             provider: provider,
             label: label,
-            lowBalanceThreshold: lowBalanceThreshold
+            warningThreshold: warningThreshold
         )
         return MockFixture(
             account: account,

@@ -1,10 +1,10 @@
 import SwiftUI
 
-/// Collects Provider, Region when applicable, label, credential, and the
-/// optional low-Balance warning when adding an Account; when editing, it shows
-/// identity read-only and collects a new label, an optional credential
-/// replacement, and the threshold. A saved credential is never read back into
-/// the field, and the threshold is off by default.
+/// Collects Provider, Region when applicable, Account Kind, label, credential,
+/// and the two health thresholds when adding an Account; when editing, it
+/// shows identity read-only and collects a new label, an optional credential
+/// replacement, and the thresholds. A saved credential is never read back into
+/// the field.
 @MainActor
 struct AccountFormView: View {
     enum Mode {
@@ -19,10 +19,11 @@ struct AccountFormView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var provider: Provider
     @State private var region: Region
+    @State private var kind: AccountKind
     @State private var label: String
     @State private var credential = ""
-    @State private var lowBalanceWarningEnabled: Bool
-    @State private var lowBalanceThresholdText: String
+    @State private var warningThresholdText: String
+    @State private var criticalThresholdText: String
     @State private var errorMessage: String?
     @State private var isSaving = false
 
@@ -38,16 +39,20 @@ struct AccountFormView: View {
         case .add:
             _provider = State(initialValue: .deepSeek)
             _region = State(initialValue: .domestic)
+            _kind = State(initialValue: .balance)
             _label = State(initialValue: "")
-            _lowBalanceWarningEnabled = State(initialValue: false)
-            _lowBalanceThresholdText = State(initialValue: "")
+            _warningThresholdText = State(initialValue: "")
+            _criticalThresholdText = State(initialValue: "")
         case let .edit(account):
             _provider = State(initialValue: account.provider)
             _region = State(initialValue: account.region ?? .domestic)
+            _kind = State(initialValue: account.kind)
             _label = State(initialValue: account.label)
-            _lowBalanceWarningEnabled = State(initialValue: account.lowBalanceThreshold != nil)
-            _lowBalanceThresholdText = State(
-                initialValue: account.lowBalanceThreshold?.description ?? ""
+            _warningThresholdText = State(
+                initialValue: account.warningThreshold?.description ?? ""
+            )
+            _criticalThresholdText = State(
+                initialValue: account.criticalThreshold?.description ?? ""
             )
         }
     }
@@ -59,7 +64,7 @@ struct AccountFormView: View {
 
             Form {
                 if case .add = mode {
-                    Picker("厂商", selection: $provider) {
+                    Picker("厂商", selection: providerSelection) {
                         ForEach(Provider.addableCases, id: \.self) { provider in
                             Text(provider.displayName).tag(provider)
                         }
@@ -70,7 +75,7 @@ struct AccountFormView: View {
 
                 if provider.supportsRegion {
                     if case .add = mode {
-                        Picker("区域", selection: $region) {
+                        Picker("区域", selection: regionSelection) {
                             ForEach(Region.allCases, id: \.self) { region in
                                 Text(region.displayName).tag(region)
                             }
@@ -78,6 +83,19 @@ struct AccountFormView: View {
                     } else {
                         LabeledContent("区域", value: region.displayName)
                     }
+                }
+
+                if case .add = mode, provider.supportedKinds.count > 1 {
+                    Picker(UIStrings.accountKindLabel, selection: $kind) {
+                        ForEach(provider.supportedKinds, id: \.self) { kind in
+                            Text(kind.displayName).tag(kind)
+                        }
+                    }
+                    .onChange(of: kind) { _, newKind in
+                        applyDefaults(for: newKind)
+                    }
+                } else {
+                    LabeledContent(UIStrings.accountKindLabel, value: kind.displayName)
                 }
 
                 TextField("标签", text: $label)
@@ -89,14 +107,17 @@ struct AccountFormView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Section(UIStrings.lowBalanceWarningTitle) {
-                    Toggle(UIStrings.lowBalanceWarningToggle, isOn: $lowBalanceWarningEnabled)
-                    if lowBalanceWarningEnabled {
-                        TextField(UIStrings.lowBalanceThresholdLabel, text: $lowBalanceThresholdText)
-                    }
-                    Text(UIStrings.lowBalanceThresholdHint)
+                Section(UIStrings.healthThresholdsTitle) {
+                    TextField(warningFieldLabel, text: $warningThresholdText)
+                    TextField(criticalFieldLabel, text: $criticalThresholdText)
+                    Text(thresholdHint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    if kind == .balance {
+                        Text(UIStrings.thresholdCurrencyHint)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -131,6 +152,59 @@ struct AccountFormView: View {
         .frame(width: 440)
     }
 
+    private var providerSelection: Binding<Provider> {
+        Binding(
+            get: { provider },
+            set: { newProvider in
+                let oldCurrency = provider.defaultCurrency(for: region)
+                provider = newProvider
+                if !newProvider.supportedKinds.contains(kind) {
+                    kind = newProvider.supportedKinds.first ?? .balance
+                    applyDefaults(for: kind)
+                } else if newProvider.defaultCurrency(for: region) != oldCurrency {
+                    applyDefaults(for: kind)
+                }
+            }
+        )
+    }
+
+    private var regionSelection: Binding<Region> {
+        Binding(
+            get: { region },
+            set: { newRegion in
+                let oldCurrency = provider.defaultCurrency(for: region)
+                region = newRegion
+                if provider.defaultCurrency(for: newRegion) != oldCurrency {
+                    applyDefaults(for: kind)
+                }
+            }
+        )
+    }
+
+    private func applyDefaults(for kind: AccountKind) {
+        let defaults = AccountThresholds.defaults(for: kind)
+        warningThresholdText = defaults.warning?.description ?? ""
+        criticalThresholdText = defaults.critical?.description ?? ""
+    }
+
+    private var warningFieldLabel: String {
+        kind == .subscription
+            ? UIStrings.warningThresholdPercentLabel
+            : UIStrings.warningThresholdLabel
+    }
+
+    private var criticalFieldLabel: String {
+        kind == .subscription
+            ? UIStrings.criticalThresholdPercentLabel
+            : UIStrings.criticalThresholdLabel
+    }
+
+    private var thresholdHint: String {
+        kind == .subscription
+            ? UIStrings.healthThresholdsPercentHint
+            : UIStrings.healthThresholdsHint
+    }
+
     private var title: String {
         switch mode {
         case .add: "添加账户"
@@ -156,7 +230,7 @@ struct AccountFormView: View {
     }
 
     private func save() {
-        guard let threshold = validatedThreshold() else {
+        guard let thresholds = validatedThresholds() else {
             return
         }
         errorMessage = nil
@@ -170,14 +244,15 @@ struct AccountFormView: View {
                 provider: provider,
                 region: provider.supportsRegion ? region : nil,
                 label: label,
-                credential: credential
+                credential: credential,
+                kind: kind
             )
             isSaving = true
             Task {
-                await testConnectionAndSave(draft, threshold: threshold)
+                await testConnectionAndSave(draft, thresholds: thresholds)
             }
         case let .edit(account):
-            saveEdit(account, threshold: threshold)
+            saveEdit(account, thresholds: thresholds)
         }
     }
 
@@ -185,7 +260,7 @@ struct AccountFormView: View {
     /// onboarding. A rejected credential leaves no Account or Keychain item.
     private func testConnectionAndSave(
         _ draft: AccountDraft,
-        threshold: Decimal?
+        thresholds: AccountThresholds
     ) async {
         defer { isSaving = false }
         let creator = AccountCreator(
@@ -193,7 +268,7 @@ struct AccountFormView: View {
             connectionTester: connectionTester
         )
         do {
-            _ = try await creator.create(draft, lowBalanceThreshold: threshold)
+            _ = try await creator.create(draft, thresholds: thresholds)
             dismiss()
         } catch {
             errorMessage = ConnectionErrorMessage.text(
@@ -203,7 +278,7 @@ struct AccountFormView: View {
         }
     }
 
-    private func saveEdit(_ account: Account, threshold: Decimal?) {
+    private func saveEdit(_ account: Account, thresholds: AccountThresholds) {
         do {
             try manager.updateLabel(accountID: account.id, label: label)
             if !credential.isEmpty {
@@ -212,9 +287,9 @@ struct AccountFormView: View {
                     credential: credential
                 )
             }
-            try manager.updateLowBalanceThreshold(
+            try manager.updateThresholds(
                 accountID: account.id,
-                threshold: threshold
+                thresholds: thresholds
             )
             dismiss()
         } catch {
@@ -222,19 +297,19 @@ struct AccountFormView: View {
         }
     }
 
-    /// Returns `nil` both for "off" and for an invalid entry; the error
-    /// message distinguishes the invalid case, and no save happens then.
-    private func validatedThreshold() -> Decimal?? {
-        guard lowBalanceWarningEnabled else {
-            return .some(nil)
-        }
-        let normalized = lowBalanceThresholdText
-            .replacingOccurrences(of: ",", with: ".")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Decimal(string: normalized), value > 0 else {
+    /// An empty field means the threshold is unset. Invalid text or an invalid
+    /// pair reports an error and prevents any save.
+    private func validatedThresholds() -> AccountThresholds? {
+        switch ThresholdInput.parseThresholds(
+            warningText: warningThresholdText,
+            criticalText: criticalThresholdText,
+            kind: kind
+        ) {
+        case let .success(thresholds):
+            return thresholds
+        case .failure:
             errorMessage = UIStrings.invalidThreshold
             return nil
         }
-        return .some(value)
     }
 }

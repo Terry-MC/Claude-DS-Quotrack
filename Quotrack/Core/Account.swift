@@ -6,6 +6,13 @@ import Foundation
 enum AccountKind: String, Codable, Sendable, Equatable, CaseIterable {
     case balance
     case subscription
+
+    var displayName: String {
+        switch self {
+        case .balance: "充值"
+        case .subscription: "订阅"
+        }
+    }
 }
 
 /// The two optional levels an Account can use to derive its Health. For a
@@ -102,33 +109,6 @@ struct Account: Codable, Identifiable, Equatable, Sendable {
         self.criticalThreshold = criticalThreshold
     }
 
-    /// v1 compatibility: the single low-Balance threshold maps to the warning
-    /// threshold. The v1 UI still calls this path until the Balance health
-    /// ticket migrates it.
-    init(
-        id: UUID,
-        provider: Provider,
-        region: Region? = nil,
-        label: String,
-        lowBalanceThreshold: Decimal?
-    ) {
-        self.init(
-            id: id,
-            provider: provider,
-            region: region,
-            kind: .balance,
-            currency: nil,
-            label: label,
-            warningThreshold: lowBalanceThreshold,
-            criticalThreshold: nil
-        )
-    }
-
-    /// v1 compatibility alias. New code uses `warningThreshold`.
-    var lowBalanceThreshold: Decimal? {
-        warningThreshold
-    }
-
     /// Returns a copy with a new label while preserving identity, Provider,
     /// Region, kind, and both thresholds.
     func with(label: String) -> Account {
@@ -159,21 +139,6 @@ struct Account: Codable, Identifiable, Equatable, Sendable {
         )
     }
 
-    /// Returns a copy with the v1 single threshold applied as the warning
-    /// threshold. The critical threshold is cleared because the v1 path has no
-    /// second level.
-    func with(lowBalanceThreshold: Decimal?) -> Account {
-        Account(
-            id: id,
-            provider: provider,
-            region: region,
-            kind: kind,
-            currency: currency,
-            label: label,
-            warningThreshold: lowBalanceThreshold,
-            criticalThreshold: nil
-        )
-    }
 }
 
 extension Account {

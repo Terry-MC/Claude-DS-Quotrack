@@ -73,13 +73,14 @@ struct AccountCreatorTests {
 
         let account = try await creator.create(
             draft,
-            lowBalanceThreshold: Decimal(string: "5.00")
+            thresholds: AccountThresholds(warning: Decimal(string: "5.00"))
         )
 
         #expect(account.provider == .moonshot)
         #expect(account.region == .international)
         #expect(account.label == "Kimi 国际")
-        #expect(account.lowBalanceThreshold == Decimal(string: "5.00"))
+        #expect(account.currency == .cny)
+        #expect(account.warningThreshold == Decimal(string: "5.00"))
         #expect(manager.accounts == [account])
         #expect(tester.requests.map(\.draft) == [draft])
         #expect(try credentials.credential(for: account.id) == "sk-moonshot")

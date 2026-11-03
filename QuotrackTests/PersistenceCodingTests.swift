@@ -45,7 +45,7 @@ struct PersistenceCodingTests {
         #expect(account.kind == .balance)
         #expect(account.warningThreshold == Decimal(string: "10.5"))
         #expect(account.criticalThreshold == nil)
-        #expect(account.lowBalanceThreshold == Decimal(string: "10.5"))
+        #expect(account.warningThreshold == Decimal(string: "10.5"))
     }
 
     @Test

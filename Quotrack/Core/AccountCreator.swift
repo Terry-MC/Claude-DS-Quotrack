@@ -19,31 +19,26 @@ struct AccountCreator {
     /// clears the Kind's default.
     func create(
         _ draft: AccountDraft,
-        thresholds: AccountThresholds
+        thresholds: AccountThresholds = AccountThresholds()
     ) async throws -> Account {
         do {
             try thresholds.validate(for: draft.kind)
         } catch is AccountThresholdError {
             throw AccountManagerError.invalidThreshold
         }
-        _ = try await connectionTester.testConnection(draft)
-        let account = try manager.addAccount(draft)
-        try manager.updateThresholds(
-            accountID: account.id,
-            thresholds: thresholds
+        let testedSnapshot = try await connectionTester.testConnection(draft)
+        let resolvedCurrency = draft.kind == .balance
+            ? (draft.currency ?? testedSnapshot.balanceSnapshot?.balance.currency)
+            : nil
+        let savedDraft = AccountDraft(
+            provider: draft.provider,
+            region: draft.region,
+            label: draft.label,
+            credential: draft.credential,
+            kind: draft.kind,
+            currency: resolvedCurrency
         )
-        return account.with(thresholds: thresholds)
+        return try manager.addAccount(savedDraft, thresholds: thresholds)
     }
 
-    /// v1 compatibility wrapper until the Balance health UI migrates to
-    /// `AccountThresholds`.
-    func create(
-        _ draft: AccountDraft,
-        lowBalanceThreshold: Decimal? = nil
-    ) async throws -> Account {
-        try await create(
-            draft,
-            thresholds: AccountThresholds(warning: lowBalanceThreshold)
-        )
-    }
 }

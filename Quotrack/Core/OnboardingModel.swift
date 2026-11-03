@@ -18,8 +18,11 @@ final class OnboardingModel {
     private(set) var step: Step = .provider
     var selectedProvider: Provider = .deepSeek
     var selectedRegion: Region = .domestic
+    var selectedKind: AccountKind = .balance
     var label = ""
     var credential = ""
+    var warningThresholdText = ""
+    var criticalThresholdText = ""
     private(set) var errorMessage: String?
     private(set) var completedAccount: Account?
 
@@ -80,24 +83,51 @@ final class OnboardingModel {
             errorMessage = AccountManagerError.missingCredential.localizedDescription
             return
         }
+        let provider = selectedProvider
+        let kind = provider.supportedKinds.contains(selectedKind)
+            ? selectedKind
+            : (provider.supportedKinds.first ?? .balance)
+        guard let thresholds = validatedThresholds(for: kind) else {
+            return
+        }
 
         errorMessage = nil
         step = .testing
-        let provider = selectedProvider
         let draft = AccountDraft(
             provider: provider,
             region: provider.supportsRegion ? selectedRegion : nil,
             label: trimmedLabel,
-            credential: credential
+            credential: credential,
+            kind: kind
         )
         do {
-            _ = try await connectionTester.testConnection(draft)
-            let account = try accountManager.addAccount(draft)
+            let creator = AccountCreator(
+                manager: accountManager,
+                connectionTester: connectionTester
+            )
+            let account = try await creator.create(
+                draft,
+                thresholds: thresholds
+            )
             completedAccount = account
             step = .completed
         } catch {
             errorMessage = ConnectionErrorMessage.text(for: error, provider: provider)
             step = .details
+        }
+    }
+
+    private func validatedThresholds(for kind: AccountKind) -> AccountThresholds? {
+        switch ThresholdInput.parseThresholds(
+            warningText: warningThresholdText,
+            criticalText: criticalThresholdText,
+            kind: kind
+        ) {
+        case let .success(thresholds):
+            return thresholds
+        case .failure:
+            errorMessage = UIStrings.invalidThreshold
+            return nil
         }
     }
 }

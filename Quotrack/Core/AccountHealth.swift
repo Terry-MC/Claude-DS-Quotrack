@@ -11,6 +11,15 @@ enum AccountHealth: Int, Comparable, Sendable {
     static func < (lhs: AccountHealth, rhs: AccountHealth) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
+
+    var displayText: String {
+        switch self {
+        case .unset: UIStrings.healthUnset
+        case .normal: UIStrings.healthNormal
+        case .warning: UIStrings.healthWarning
+        case .critical: UIStrings.healthCritical
+        }
+    }
 }
 
 /// Pure Health evaluation. The monitor and UI supply the latest successful

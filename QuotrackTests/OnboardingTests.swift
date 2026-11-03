@@ -121,6 +121,42 @@ struct OnboardingTests {
     }
 
     @Test
+    func onboardingSavesTheEnteredThresholds() async throws {
+        let context = makeContext()
+        context.model.selectedProvider = .deepSeek
+        context.model.advance()
+        context.model.label = "个人账户"
+        context.model.credential = "sk-deepseek"
+        context.model.warningThresholdText = "50"
+        context.model.criticalThresholdText = "20"
+
+        await context.model.submit()
+
+        let account = try #require(context.model.completedAccount)
+        #expect(account.warningThreshold == Decimal(string: "50"))
+        #expect(account.criticalThreshold == Decimal(string: "20"))
+        #expect(account.currency == .cny)
+        #expect(context.manager.accounts == [account])
+    }
+
+    @Test
+    func invalidOnboardingThresholdsStayOnDetailsAndDoNotTestTheCredential() async throws {
+        let context = makeContext()
+        context.model.selectedProvider = .deepSeek
+        context.model.advance()
+        context.model.label = "个人账户"
+        context.model.credential = "sk-deepseek"
+        context.model.warningThresholdText = "0"
+
+        await context.model.submit()
+
+        #expect(context.model.step == .details)
+        #expect(context.model.errorMessage == UIStrings.invalidThreshold)
+        #expect(context.tester.requests.isEmpty)
+        #expect(context.manager.accounts.isEmpty)
+    }
+
+    @Test
     func aSuccessfulConnectionTestSavesTheAccountAndCompletesOnboarding() async throws {
         let context = makeContext()
         context.model.selectedProvider = .moonshot
@@ -138,7 +174,7 @@ struct OnboardingTests {
         #expect(account.provider == .moonshot)
         #expect(account.region == .international)
         #expect(account.label == "Kimi 国际")
-        #expect(account.lowBalanceThreshold == nil)
+        #expect(account.warningThreshold == nil)
         #expect(context.manager.accounts == [account])
         #expect(context.store.loadAccounts() == [account])
         let storedCredential = try context.credentials.credential(for: account.id)

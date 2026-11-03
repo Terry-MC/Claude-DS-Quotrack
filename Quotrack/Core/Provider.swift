@@ -37,6 +37,33 @@ enum Provider: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
         allCases.filter { $0.isSupported }
     }
 
+    /// The Account Kinds this Provider can add. Moonshot will gain the Kimi
+    /// Code subscription kind when that adapter lands.
+    var supportedKinds: [AccountKind] {
+        switch self {
+        case .deepSeek, .moonshot, .openRouter:
+            [.balance]
+        case .siliconFlow:
+            []
+        }
+    }
+
+    /// The currency a new Balance Account most likely uses. The connection
+    /// test's Snapshot remains authoritative; this is used for form resets,
+    /// mock mode, and Settings display when an old Account has no currency.
+    func defaultCurrency(for region: Region?) -> Currency? {
+        switch self {
+        case .deepSeek:
+            .cny
+        case .moonshot:
+            region == .international ? .usd : .cny
+        case .openRouter:
+            .usd
+        case .siliconFlow:
+            region == .international ? .usd : .cny
+        }
+    }
+
     /// Whether the Provider has independently credentialed Regions. It stays
     /// true for SiliconFlow so legacy Accounts keep their Region on disk.
     var supportsRegion: Bool {

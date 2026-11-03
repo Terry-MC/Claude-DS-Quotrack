@@ -239,23 +239,50 @@ private struct AccountRow: View {
 
             Spacer(minLength: 12)
 
-            Button("编辑", action: onEdit)
+            if account.provider.isSupported {
+                Button("编辑", action: onEdit)
+            }
             Button("删除", role: .destructive, action: onDelete)
         }
         .padding(.vertical, 8)
     }
 
     private var detailText: String {
-        var parts = [account.provider.displayName]
+        var parts = [account.provider.displayName, account.kind.displayName]
         if let region = account.region {
             parts.append(region.displayName)
         }
         if !account.provider.isSupported {
             parts.append(UIStrings.unsupportedProviderState)
         }
-        if let threshold = account.lowBalanceThreshold {
-            parts.append("\(UIStrings.lowBalanceThresholdSaved) \(threshold.description)")
+
+        let thresholds = account.thresholds
+        var thresholdParts: [String] = []
+        if let warning = thresholds.warning {
+            thresholdParts.append(
+                "\(UIStrings.warningThresholdShort) \(thresholdValue(warning))"
+            )
         }
+        if let critical = thresholds.critical {
+            thresholdParts.append(
+                "\(UIStrings.criticalThresholdShort) \(thresholdValue(critical))"
+            )
+        }
+        parts.append(
+            thresholdParts.isEmpty
+                ? UIStrings.thresholdUnset
+                : thresholdParts.joined(separator: " / ")
+        )
         return parts.joined(separator: " · ")
+    }
+
+    private func thresholdValue(_ value: Decimal) -> String {
+        if account.kind == .subscription {
+            return "\(value)%"
+        }
+        let currency = account.currency
+            ?? account.provider.defaultCurrency(for: account.region)
+        let symbol = currency?.symbol ?? ""
+        return "\(symbol)\(value)"
     }
 }

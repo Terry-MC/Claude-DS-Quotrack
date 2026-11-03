@@ -14,6 +14,8 @@ struct ProviderSupportTests {
         #expect(Provider.moonshot.isSupported)
         #expect(Provider.openRouter.isSupported)
         #expect(Provider.deepSeek.isLegacyUnsupported == false)
+        #expect(Provider.siliconFlow.supportedKinds.isEmpty)
+        #expect(Provider.deepSeek.supportedKinds == [.balance])
     }
 
     @Test

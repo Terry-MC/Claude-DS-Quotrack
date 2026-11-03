@@ -8,6 +8,7 @@ enum UIStrings {
     // Menu bar aggregate state
     static let menuBarNormalDescription = "Quotrack：一切正常"
     static let menuBarWarningDescription = "Quotrack：有账户余额偏低或数据已过期"
+    static let menuBarCriticalDescription = "Quotrack：有账户余额紧急"
     static let menuBarErrorDescription = "Quotrack：有账户出错"
 
     // Breakdown labels
@@ -28,6 +29,34 @@ enum UIStrings {
     static let malformedResponseError = "响应格式异常，无法解析。"
     static let unsupportedAccountKindError = "该账户类型暂不支持。"
     static let unknownError = "未知错误，请稍后重试。"
+
+    // Health and thresholds
+    static let healthNormal = "正常"
+    static let healthWarning = "预警"
+    static let healthCritical = "紧急"
+    static let healthUnset = "未设置"
+    static let thresholdUnset = "未设置阈值"
+    static let warningThresholdShort = "预警"
+    static let criticalThresholdShort = "紧急"
+    static let warningThresholdLabel = "预警线"
+    static let criticalThresholdLabel = "紧急线"
+    static let healthThresholdsTitle = "健康阈值"
+    static let healthThresholdsHint = "留空表示不设置。余额低于或等于预警线时显示“预警”，低于或等于紧急线时显示“紧急”。"
+    static let healthThresholdsPercentHint = "留空表示不设置。剩余额度低于或等于预警线时显示“预警”，低于或等于紧急线时显示“紧急”。"
+    static let thresholdCurrencyHint = "金额按连接测试返回的币种保存。"
+    static let warningThresholdPercentLabel = "余量预警线（%）"
+    static let criticalThresholdPercentLabel = "余量紧急线（%）"
+    static let healthLabel = "健康"
+    static let thresholdLabel = "阈值"
+
+    static func currencyMismatchWarning(
+        thresholdCurrency: String,
+        balanceCurrency: String
+    ) -> String {
+        "阈值币种为 \(thresholdCurrency)，当前余额为 \(balanceCurrency)，健康状态未计算。"
+    }
+    static let accountKindLabel = "账户类型"
+    static let statusFresh = "已更新"
     /// The row state for a persisted Account whose Provider was dropped.
     static let unsupportedProviderState = "不再支持"
 
@@ -66,12 +95,7 @@ enum UIStrings {
     static let settingsDeferredIntegrationsExplanation = """
     WorkBuddy、Claude Pro/Max、ChatGPT/Codex、Gemini CLI 和 SuperGrok 需要读取桌面应用或 CLI 的 OAuth 登录状态，v2 暂不支持。Quotrack 不会读取浏览器 Cookie、桌面容器或 CLI 凭证；相关本地桥接计划见 ADR-0002。
     """
-    static let lowBalanceWarningTitle = "低余额提醒"
-    static let lowBalanceWarningToggle = "启用低余额提醒"
-    static let lowBalanceThresholdLabel = "阈值"
-    static let lowBalanceThresholdHint = "余额低于该值时，面板会显示警告（默认关闭）。"
-    static let lowBalanceThresholdSaved = "低余额提醒"
-    static let invalidThreshold = "低余额阈值必须大于 0。"
+    static let invalidThreshold = "阈值无效：请检查数值范围，并确保紧急线低于预警线。"
 
     // Onboarding
     static let onboardingTitle = "欢迎使用 Quotrack"

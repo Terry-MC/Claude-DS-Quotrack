@@ -79,6 +79,12 @@ struct OnboardingView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+        .onChange(of: model.selectedProvider) { _, newProvider in
+            if !newProvider.supportedKinds.contains(model.selectedKind) {
+                model.selectedKind = newProvider.supportedKinds.first ?? .balance
+                applyThresholdDefaults(for: model.selectedKind)
+            }
+        }
     }
 
     private var regionStep: some View {
@@ -99,6 +105,23 @@ struct OnboardingView: View {
 
     private var detailsStep: some View {
         VStack(alignment: .leading, spacing: 12) {
+            if model.selectedProvider.supportedKinds.count > 1 {
+                Picker(UIStrings.accountKindLabel, selection: $model.selectedKind) {
+                    ForEach(model.selectedProvider.supportedKinds, id: \.self) { kind in
+                        Text(kind.displayName).tag(kind)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: model.selectedKind) { _, newKind in
+                    applyThresholdDefaults(for: newKind)
+                }
+            } else {
+                LabeledContent(
+                    UIStrings.accountKindLabel,
+                    value: model.selectedKind.displayName
+                )
+            }
+
             TextField(UIStrings.onboardingLabelField, text: $model.label)
                 .textFieldStyle(.roundedBorder)
             SecureField(UIStrings.onboardingCredentialField, text: $model.credential)
@@ -109,10 +132,42 @@ struct OnboardingView: View {
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            TextField(warningFieldLabel, text: $model.warningThresholdText)
+                .textFieldStyle(.roundedBorder)
+            TextField(criticalFieldLabel, text: $model.criticalThresholdText)
+                .textFieldStyle(.roundedBorder)
+            Text(thresholdHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             Text(UIStrings.onboardingCredentialHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    private func applyThresholdDefaults(for kind: AccountKind) {
+        let defaults = AccountThresholds.defaults(for: kind)
+        model.warningThresholdText = defaults.warning?.description ?? ""
+        model.criticalThresholdText = defaults.critical?.description ?? ""
+    }
+
+    private var warningFieldLabel: String {
+        model.selectedKind == .subscription
+            ? UIStrings.warningThresholdPercentLabel
+            : UIStrings.warningThresholdLabel
+    }
+
+    private var criticalFieldLabel: String {
+        model.selectedKind == .subscription
+            ? UIStrings.criticalThresholdPercentLabel
+            : UIStrings.criticalThresholdLabel
+    }
+
+    private var thresholdHint: String {
+        model.selectedKind == .subscription
+            ? UIStrings.healthThresholdsPercentHint
+            : UIStrings.healthThresholdsHint
     }
 
     private var testingStep: some View {

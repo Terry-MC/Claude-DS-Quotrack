@@ -99,7 +99,7 @@ struct BalanceMonitorTests {
         #expect(viewState.label == "个人账户")
         #expect(viewState.balanceText == "¥42.50")
         #expect(viewState.updatedText == "2分钟前")
-        #expect(viewState.statusText == "正常")
+        #expect(viewState.statusText == UIStrings.statusFresh)
     }
 
     @Test

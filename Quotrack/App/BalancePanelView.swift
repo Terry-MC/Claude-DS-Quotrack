@@ -45,6 +45,14 @@ struct BalancePanelView: View {
                 Spacer(minLength: 0)
                 Text(header.healthyText)
                     .foregroundStyle(.green)
+                if header.warningCount > 0 {
+                    Text(header.warningText)
+                        .foregroundStyle(.orange)
+                }
+                if header.criticalCount > 0 {
+                    Text(header.criticalText)
+                        .foregroundStyle(.red)
+                }
                 Text(header.errorText)
                     .foregroundStyle(.red)
                 Button {
@@ -67,6 +75,7 @@ struct BalancePanelView: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(rows) { row in
                         BalanceRowView(
+                            account: row.account,
                             viewState: BalanceRowPresentation.viewState(for: row, now: Date()),
                             detail: BalanceRowPresentation.detailViewState(for: row),
                             isExpanded: expansion.isExpanded(row.id),
@@ -86,6 +95,7 @@ struct BalancePanelView: View {
 
 @MainActor
 private struct BalanceRowView: View {
+    let account: Account
     let viewState: BalanceRowViewState
     let detail: BalanceRowDetailViewState
     let isExpanded: Bool
@@ -102,10 +112,30 @@ private struct BalanceRowView: View {
                         .accessibilityHidden(true)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(viewState.providerName)
-                            .font(.headline)
+                        HStack(spacing: 6) {
+                            Text(viewState.providerName)
+                                .font(.headline)
+                            if viewState.showsHealth {
+                                Text(viewState.healthText)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(viewState.health.color)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        viewState.health.color.opacity(0.12),
+                                        in: Capsule()
+                                    )
+                            }
+                        }
                         Text(viewState.label)
                             .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        BalanceThresholdGauge(
+                            account: account,
+                            health: viewState.health
+                        )
+                        Text(viewState.thresholdText)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
 
@@ -160,6 +190,59 @@ private struct BalanceRowView: View {
     }
 }
 
+private extension AccountHealth {
+    var emphasis: BalanceRowAppearance.Emphasis {
+        switch self {
+        case .normal: .positive
+        case .warning: .warning
+        case .critical: .error
+        case .unset: .secondary
+        }
+    }
+
+    var color: Color { emphasis.color }
+}
+
+private extension ThresholdGaugeSegment.Role {
+    var emphasis: BalanceRowAppearance.Emphasis {
+        switch self {
+        case .critical: .error
+        case .warning: .warning
+        case .normal: .positive
+        }
+    }
+}
+
+private struct BalanceThresholdGauge: View {
+    let account: Account
+    let health: AccountHealth
+
+    var body: some View {
+        let segments = ThresholdGaugePresentation.segments(
+            for: account,
+            health: health
+        )
+        if !segments.isEmpty {
+            HStack(spacing: 2) {
+                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(
+                            segment.role.emphasis.color.opacity(
+                                segment.isActive ? 1 : 0.22
+                            )
+                        )
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 4)
+            .clipShape(Capsule())
+            .accessibilityLabel(
+                "\(UIStrings.healthThresholdsTitle)：\(health.displayText)"
+            )
+        }
+    }
+}
+
 private extension BalanceRowAppearance.Emphasis {
     var color: Color {
         switch self {
@@ -187,6 +270,14 @@ private struct BalanceRowDetailView: View {
             }
             if let fetchedAtText = detail.fetchedAtText {
                 labelledValue(UIStrings.fetchedAtLabel, fetchedAtText)
+            }
+            labelledValue(UIStrings.healthLabel, detail.healthText)
+            labelledValue(UIStrings.thresholdLabel, detail.thresholdText)
+            if let currencyWarningText = detail.currencyWarningText {
+                Text(currencyWarningText)
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if !detail.breakdown.isEmpty {
                 Text(UIStrings.breakdownTitle)
@@ -296,6 +387,92 @@ private struct BalanceRowDetailView: View {
         .frame(width: 360, height: 420)
 }
 
+#Preview("健康状态") {
+    let now = Date()
+    let normalAccount = Account(
+        id: UUID(),
+        provider: .deepSeek,
+        currency: .cny,
+        label: "正常",
+        warningThreshold: 10,
+        criticalThreshold: 5
+    )
+    let warningAccount = Account(
+        id: UUID(),
+        provider: .moonshot,
+        currency: .cny,
+        label: "预警",
+        warningThreshold: 10,
+        criticalThreshold: 5
+    )
+    let criticalAccount = Account(
+        id: UUID(),
+        provider: .openRouter,
+        currency: .usd,
+        label: "紧急",
+        warningThreshold: 10,
+        criticalThreshold: 5
+    )
+    let unsetAccount = Account(
+        id: UUID(),
+        provider: .deepSeek,
+        currency: .cny,
+        label: "未设置"
+    )
+    let rows = [
+        BalanceRow(
+            account: normalAccount,
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: normalAccount.id,
+                    balance: Balance(amount: 20, currency: .cny),
+                    fetchedAt: now,
+                    isAvailable: true
+                )
+            ),
+            status: .fresh
+        ),
+        BalanceRow(
+            account: warningAccount,
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: warningAccount.id,
+                    balance: Balance(amount: 7, currency: .cny),
+                    fetchedAt: now,
+                    isAvailable: true
+                )
+            ),
+            status: .fresh
+        ),
+        BalanceRow(
+            account: criticalAccount,
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: criticalAccount.id,
+                    balance: Balance(amount: 4, currency: .usd),
+                    fetchedAt: now,
+                    isAvailable: true
+                )
+            ),
+            status: .fresh
+        ),
+        BalanceRow(
+            account: unsetAccount,
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: unsetAccount.id,
+                    balance: Balance(amount: 20, currency: .cny),
+                    fetchedAt: now,
+                    isAvailable: true
+                )
+            ),
+            status: .fresh
+        ),
+    ]
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
+        .frame(width: 360, height: 520)
+}
+
 #Preview("展开详情") {
     let now = Date()
     let account = Account(id: UUID(), provider: .deepSeek, label: "个人账户")
@@ -311,6 +488,7 @@ private struct BalanceRowDetailView: View {
     )
     let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
     BalanceRowView(
+        account: account,
         viewState: BalanceRowPresentation.viewState(for: row, now: now),
         detail: BalanceRowPresentation.detailViewState(for: row),
         isExpanded: true,
@@ -325,6 +503,7 @@ private struct BalanceRowDetailView: View {
     let account = Account(id: UUID(), provider: .openRouter, label: "OpenRouter 管理")
     let row = BalanceRow(account: account, snapshot: nil, status: .error, error: .permission)
     BalanceRowView(
+        account: account,
         viewState: BalanceRowPresentation.viewState(for: row, now: Date()),
         detail: BalanceRowPresentation.detailViewState(for: row),
         isExpanded: true,

@@ -20,7 +20,107 @@ struct BalanceRowPresentationTests {
         #expect(viewState.label == "个人账户")
         #expect(viewState.balanceText == "¥42.50")
         #expect(viewState.updatedText == "5分钟前")
-        #expect(viewState.statusText == "正常")
+        #expect(viewState.statusText == UIStrings.statusFresh)
+    }
+
+    @Test
+    func rowViewStateShowsHealthAndThresholdText() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户",
+            warningThreshold: 10,
+            criticalThreshold: 5
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .cny),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.health == .warning)
+        #expect(viewState.healthText == UIStrings.healthWarning)
+        #expect(viewState.thresholdText == "预警 ¥10 · 紧急 ¥5")
+        #expect(viewState.tone == .warning)
+        #expect(viewState.showsHealth)
+    }
+
+    @Test
+    func rowViewStateShowsUnsetWithoutThresholds() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .cny),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.health == .unset)
+        #expect(viewState.healthText == UIStrings.healthUnset)
+        #expect(viewState.thresholdText == UIStrings.thresholdUnset)
+        #expect(viewState.tone == .unset)
+        #expect(!viewState.showsHealth)
+    }
+
+    @Test
+    func detailWarnsWhenThresholdCurrencyDiffersFromTheSnapshot() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户",
+            warningThreshold: 10
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .usd),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(detail.currencyWarningText != nil)
+        #expect(detail.healthText == UIStrings.healthUnset)
+    }
+
+    @Test
+    func detailDoesNotWarnAboutCurrencyWithoutThresholds() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let account = Account(
+            id: UUID(),
+            provider: .deepSeek,
+            currency: .cny,
+            label: "个人账户"
+        )
+        let snapshot = BalanceSnapshot(
+            accountID: account.id,
+            balance: Balance(amount: 7, currency: .usd),
+            fetchedAt: now,
+            isAvailable: true
+        )
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+
+        #expect(detail.currencyWarningText == nil)
     }
 
     @Test
@@ -232,10 +332,22 @@ struct BalanceRowPresentationTests {
             AggregateBalanceState.normal
         ),
         (
-            BalanceRowTone.lowBalance,
+            BalanceRowTone.warning,
             .warning,
             .warning,
             .warning
+        ),
+        (
+            BalanceRowTone.critical,
+            .error,
+            .error,
+            .critical
+        ),
+        (
+            BalanceRowTone.unset,
+            .primary,
+            .primary,
+            .normal
         ),
         (
             BalanceRowTone.stale,

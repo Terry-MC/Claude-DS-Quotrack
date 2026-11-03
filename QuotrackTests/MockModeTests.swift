@@ -83,7 +83,7 @@ struct MockModeTests {
     }
 
     @Test
-    func headerCountsHealthyAndErrorAccounts() async {
+    func headerCountsHealthSeverities() async {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let monitor = LiveBalanceMonitor(
             dataSource: .mock(now: now),
@@ -94,9 +94,12 @@ struct MockModeTests {
         await monitor.refresh()
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
-        #expect(header.healthyCount == 3)
+        #expect(header.healthyCount == 0)
+        #expect(header.warningCount == 2)
+        #expect(header.criticalCount == 0)
         #expect(header.errorCount == 7)
-        #expect(header.healthyText == "正常 3")
+        #expect(header.healthyText == "正常 0")
+        #expect(header.warningText == "预警 2")
         #expect(header.errorText == "错误 7")
     }
 
@@ -144,8 +147,8 @@ struct MockModeTests {
                 == Balance(amount: Decimal(string: "0.80")!, currency: .cny)
         )
         #expect(lowBalanceRow.status == .fresh)
-        #expect(lowBalanceRow.account.lowBalanceThreshold == Decimal(string: "5.00"))
-        #expect(BalanceRowPresentation.tone(for: lowBalanceRow) == .lowBalance)
+        #expect(lowBalanceRow.account.warningThreshold == Decimal(string: "5.00"))
+        #expect(BalanceRowPresentation.tone(for: lowBalanceRow) == .warning)
     }
 
     @Test

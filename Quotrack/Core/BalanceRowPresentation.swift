@@ -5,8 +5,12 @@ import Foundation
 /// without SwiftUI.
 enum BalanceRowTone: Equatable, Sendable {
     case normal
-    /// The Snapshot is fresh but its Balance is below the Account's threshold.
-    case lowBalance
+    /// The Snapshot is fresh and its Health is warning.
+    case warning
+    /// The Snapshot is fresh and its Health is critical.
+    case critical
+    /// The Snapshot is fresh but the Account has no thresholds.
+    case unset
     /// No successful refresh within three Polling Intervals; last known
     /// Balance stays visible but may be outdated.
     case stale
@@ -31,6 +35,13 @@ struct BalanceRowViewState: Identifiable, Equatable, Sendable {
     let statusText: String
     let status: SnapshotStatus?
     let tone: BalanceRowTone
+    let health: AccountHealth
+    let healthText: String
+    let thresholdText: String
+    /// False when the row has no evaluable Health (error, pending, unsupported,
+    /// no snapshot, no thresholds, or a currency/kind mismatch). The threshold
+    /// text and detail still explain why.
+    let showsHealth: Bool
 }
 
 /// One breakdown line in an expanded row.
@@ -52,6 +63,11 @@ struct BalanceRowDetailViewState: Equatable, Sendable {
     /// Human-readable detail for the typed failure, if this row has one.
     let errorText: String?
     let breakdown: [BalanceBreakdownViewState]
+    let healthText: String
+    let thresholdText: String
+    /// Set when the Account's threshold currency no longer matches the
+    /// Snapshot currency, so Health is not evaluated.
+    let currencyWarningText: String?
 }
 
 enum BalanceRowPresentation {
@@ -61,6 +77,15 @@ enum BalanceRowPresentation {
 
     static func viewState(for row: BalanceRow, now: Date) -> BalanceRowViewState {
         let status = row.isUnsupported ? SnapshotStatus.unsupported : row.status
+        let health = health(for: row)
+        let thresholds = row.account.thresholds
+        let showsHealth = !row.isUnsupported
+            && row.error == nil
+            && row.status != .error
+            && row.status != nil
+            && row.snapshot != nil
+            && (thresholds.warning != nil || thresholds.critical != nil)
+            && health != .unset
         return BalanceRowViewState(
             id: row.id,
             providerName: row.account.provider.displayName,
@@ -73,16 +98,19 @@ enum BalanceRowPresentation {
                 : row.snapshot.map { relativeText(for: $0.fetchedAt, now: now) } ?? placeholder,
             statusText: status.map(statusText(for:)) ?? placeholder,
             status: status,
-            tone: tone(for: row)
+            tone: tone(for: row),
+            health: health,
+            healthText: health.displayText,
+            thresholdText: thresholdText(for: row),
+            showsHealth: showsHealth
         )
     }
 
     /// Status wins over the low-Balance warning: an error is red and a Stale
     /// Snapshot is gray even when its last known Balance is below the
     /// threshold. Only a fresh Balance below the Account's threshold is amber.
-    /// The warning is strictly below, so a Balance equal to the threshold is
-    /// still normal. No Snapshot or no threshold means there is nothing to
-    /// compare.
+    /// The warning applies at or below the threshold, matching AccountHealth.
+    /// No Snapshot or no threshold means there is nothing to compare.
     static func tone(for row: BalanceRow) -> BalanceRowTone {
         // A legacy Provider is a permanent state, not a transient failure.
         if row.isUnsupported {
@@ -106,15 +134,45 @@ enum BalanceRowPresentation {
         case .unsupported:
             return .unsupported
         case .fresh:
-            guard
-                let threshold = row.account.lowBalanceThreshold,
-                let amount = row.balanceSnapshot?.balance.amount,
-                amount < threshold
-            else {
-                return .normal
+            switch health(for: row) {
+            case .normal: return .normal
+            case .warning: return .warning
+            case .critical: return .critical
+            case .unset: return .unset
             }
-            return .lowBalance
         }
+    }
+
+    private static func health(for row: BalanceRow) -> AccountHealth {
+        row.isUnsupported
+            ? .unset
+            : AccountHealthEvaluator.health(for: row.account, snapshot: row.snapshot)
+    }
+
+    private static func thresholdText(for row: BalanceRow) -> String {
+        let thresholds = row.account.thresholds
+        var parts: [String] = []
+        if let warning = thresholds.warning {
+            parts.append(
+                "\(UIStrings.warningThresholdShort) \(thresholdValue(warning, for: row))"
+            )
+        }
+        if let critical = thresholds.critical {
+            parts.append(
+                "\(UIStrings.criticalThresholdShort) \(thresholdValue(critical, for: row))"
+            )
+        }
+        return parts.isEmpty ? UIStrings.thresholdUnset : parts.joined(separator: " · ")
+    }
+
+    private static func thresholdValue(_ value: Decimal, for row: BalanceRow) -> String {
+        if row.account.kind == .subscription {
+            return "\(value)%"
+        }
+        let symbol = row.account.currency?.symbol
+            ?? row.balanceSnapshot?.balance.currency.symbol
+            ?? ""
+        return "\(symbol)\(value)"
     }
 
     static func detailViewState(
@@ -127,10 +185,14 @@ enum BalanceRowPresentation {
                 balanceText: nil,
                 fetchedAtText: nil,
                 errorText: nil,
-                breakdown: []
+                breakdown: [],
+                healthText: AccountHealth.unset.displayText,
+                thresholdText: thresholdText(for: row),
+                currencyWarningText: nil
             )
         }
         let snapshot = row.balanceSnapshot
+        let health = health(for: row)
         return BalanceRowDetailViewState(
             accountID: row.id,
             balanceText: snapshot.map(preciseBalanceText(for:)),
@@ -142,7 +204,25 @@ enum BalanceRowPresentation {
                     label: breakdownLabel(for: item.kind),
                     amountText: (snapshot?.balance.currency.symbol ?? "") + item.amount.description
                 )
-            }
+            },
+            healthText: health.displayText,
+            thresholdText: thresholdText(for: row),
+            currencyWarningText: currencyWarning(for: row)
+        )
+    }
+
+    private static func currencyWarning(for row: BalanceRow) -> String? {
+        let thresholds = row.account.thresholds
+        guard row.account.kind == .balance,
+              thresholds.warning != nil || thresholds.critical != nil,
+              let accountCurrency = row.account.currency,
+              let snapshotCurrency = row.balanceSnapshot?.balance.currency,
+              accountCurrency != snapshotCurrency else {
+            return nil
+        }
+        return UIStrings.currencyMismatchWarning(
+            thresholdCurrency: accountCurrency.code,
+            balanceCurrency: snapshotCurrency.code
         )
     }
 
@@ -187,7 +267,7 @@ enum BalanceRowPresentation {
 
     private static func statusText(for status: SnapshotStatus) -> String {
         switch status {
-        case .fresh: "正常"
+        case .fresh: UIStrings.statusFresh
         case .stale: "已过期"
         case .unavailable: "不可用"
         case .unsupported: UIStrings.unsupportedProviderState

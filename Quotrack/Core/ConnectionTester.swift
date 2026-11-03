@@ -24,10 +24,11 @@ struct MockConnectionTester: ConnectionTesting {
     }
 
     func testConnection(_ draft: AccountDraft) async throws -> AccountSnapshot {
-        .balance(
+        let currency = draft.provider.defaultCurrency(for: draft.region) ?? .cny
+        return .balance(
             BalanceSnapshot(
                 accountID: UUID(),
-                balance: Balance(amount: amount, currency: .cny),
+                balance: Balance(amount: amount, currency: currency),
                 fetchedAt: now(),
                 isAvailable: true
             )

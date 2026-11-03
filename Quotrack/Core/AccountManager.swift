@@ -21,12 +21,21 @@ final class AccountManager {
     /// identity in the SnapshotStore. A failed metadata write rolls back the
     /// credential so no orphan secret is left behind.
     @discardableResult
-    func addAccount(_ draft: AccountDraft) throws -> Account {
+    func addAccount(
+        _ draft: AccountDraft,
+        thresholds: AccountThresholds? = nil
+    ) throws -> Account {
         let trimmedLabel = try validatedLabel(draft.label)
         guard !draft.credential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
-        let defaults = AccountThresholds.defaults(for: draft.kind)
+        let resolvedThresholds = thresholds
+            ?? AccountThresholds.defaults(for: draft.kind)
+        do {
+            try resolvedThresholds.validate(for: draft.kind)
+        } catch is AccountThresholdError {
+            throw AccountManagerError.invalidThreshold
+        }
         let account = Account(
             id: UUID(),
             provider: draft.provider,
@@ -34,8 +43,8 @@ final class AccountManager {
             kind: draft.kind,
             currency: draft.currency,
             label: trimmedLabel,
-            warningThreshold: defaults.warning,
-            criticalThreshold: defaults.critical
+            warningThreshold: resolvedThresholds.warning,
+            criticalThreshold: resolvedThresholds.critical
         )
         try credentialStore.save(draft.credential, for: account.id)
         do {
@@ -75,20 +84,6 @@ final class AccountManager {
         try replaceAccount(
             at: index,
             with: accounts[index].with(thresholds: thresholds)
-        )
-    }
-
-    /// Enables or clears the Account's v1 single warning threshold. It routes
-    /// through the kind-aware two-level validation, so a Quota Account cannot
-    /// store an out-of-range percentage. The critical threshold is cleared
-    /// because the v1 path has no second level.
-    func updateLowBalanceThreshold(
-        accountID: Account.ID,
-        threshold: Decimal?
-    ) throws {
-        try updateThresholds(
-            accountID: accountID,
-            thresholds: AccountThresholds(warning: threshold)
         )
     }
 
@@ -144,7 +139,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
         case .accountNotFound: "账户不存在。"
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
-        case .invalidThreshold: "阈值无效：请检查数值范围，并确保紧急线低于预警线。"
+        case .invalidThreshold: UIStrings.invalidThreshold
         }
     }
 }

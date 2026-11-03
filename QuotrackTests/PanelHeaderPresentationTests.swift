@@ -3,19 +3,24 @@ import Testing
 
 struct PanelHeaderPresentationTests {
     @Test
-    func lowBalanceWarningsDoNotChangeHealthyOrErrorCounts() {
+    func healthCountsSeparateNormalWarningCriticalAndError() {
         let rows = [
-            makeRow(status: .fresh, threshold: "10", amount: "50"),
-            makeRow(status: .fresh, threshold: "10", amount: "5"),
+            makeRow(status: .fresh, warning: "10", amount: "50"),
+            makeRow(status: .fresh, warning: "10", amount: "5"),
+            makeRow(status: .fresh, warning: "10", critical: "5", amount: "5"),
             makeRow(status: .stale, amount: "5"),
             makeRow(status: .error, error: .network),
         ]
 
         let header = PanelHeaderPresentation.viewState(for: rows)
 
-        #expect(header.healthyCount == 2)
+        #expect(header.healthyCount == 1)
+        #expect(header.warningCount == 2)
+        #expect(header.criticalCount == 1)
         #expect(header.errorCount == 1)
-        #expect(header.healthyText == "正常 2")
+        #expect(header.healthyText == "正常 1")
+        #expect(header.warningText == "预警 2")
+        #expect(header.criticalText == "紧急 1")
         #expect(header.errorText == "错误 1")
     }
 
@@ -34,6 +39,8 @@ struct PanelHeaderPresentationTests {
         let header = PanelHeaderPresentation.viewState(for: rows)
 
         #expect(header.healthyCount == 0)
+        #expect(header.warningCount == 0)
+        #expect(header.criticalCount == 0)
         #expect(header.errorCount == 0)
     }
 
@@ -44,13 +51,16 @@ struct PanelHeaderPresentationTests {
         let header = PanelHeaderPresentation.viewState(for: rows)
 
         #expect(header.healthyCount == 0)
+        #expect(header.warningCount == 0)
+        #expect(header.criticalCount == 0)
         #expect(header.errorCount == 0)
     }
 }
 
 private func makeRow(
     status: SnapshotStatus?,
-    threshold: String? = nil,
+    warning: String? = nil,
+    critical: String? = nil,
     amount: String = "10",
     error: BalanceProviderError? = nil
 ) -> BalanceRow {
@@ -58,7 +68,8 @@ private func makeRow(
         id: UUID(),
         provider: .deepSeek,
         label: "账户",
-        lowBalanceThreshold: threshold.flatMap { Decimal(string: $0) }
+        warningThreshold: warning.flatMap { Decimal(string: $0) },
+        criticalThreshold: critical.flatMap { Decimal(string: $0) }
     )
     let snapshot = status.map { _ in
         BalanceSnapshot(

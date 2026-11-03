@@ -19,6 +19,11 @@ enum MenuBarStatusPresentation {
                 symbolName: "exclamationmark.triangle.fill",
                 accessibilityDescription: UIStrings.menuBarWarningDescription
             )
+        case .critical:
+            MenuBarStatusViewState(
+                symbolName: "exclamationmark.circle.fill",
+                accessibilityDescription: UIStrings.menuBarCriticalDescription
+            )
         case .error:
             MenuBarStatusViewState(
                 symbolName: "exclamationmark.octagon.fill",

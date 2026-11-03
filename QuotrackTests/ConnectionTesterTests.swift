@@ -8,15 +8,15 @@ struct ConnectionTesterTests {
 
         #expect(!Provider.addableCases.contains(.siliconFlow))
         for provider in Provider.addableCases {
-            let snapshot = try await tester.testConnection(
-                AccountDraft(
-                    provider: provider,
-                    region: provider.supportsRegion ? .international : nil,
-                    label: "账户",
-                    credential: "sk-test"
-                )
+            let draft = AccountDraft(
+                provider: provider,
+                region: provider.supportsRegion ? .international : nil,
+                label: "账户",
+                credential: "sk-test"
             )
-            #expect(snapshot.balanceSnapshot?.balance.currency == .cny)
+            let snapshot = try await tester.testConnection(draft)
+            let expectedCurrency = draft.provider.defaultCurrency(for: draft.region)
+            #expect(snapshot.balanceSnapshot?.balance.currency == expectedCurrency)
             #expect(snapshot.isAvailable)
             #expect(snapshot.fetchedAt == Date(timeIntervalSince1970: 1_800_000_000))
         }
