@@ -77,6 +77,15 @@ enum UIStrings {
     static let addAccount = "添加账户…"
     static let refreshAll = "全部刷新"
 
+    // Health transition notifications and the in-app toast fallback
+    static let healthNotificationTitle = "Quotrack 健康提醒"
+    static let healthRecoveryNotificationTitle = "Quotrack 健康恢复"
+    static let notificationOpenHint = "点击打开面板并聚焦相关账户。"
+    static let dismissNotificationToast = "关闭提醒"
+    static func healthNotificationSummary(count: Int) -> String {
+        "\(count) 个账户健康状态变化"
+    }
+
     // Settings
     static let settingsAccountsTitle = "账户"
     static let settingsPollingTitle = "轮询"

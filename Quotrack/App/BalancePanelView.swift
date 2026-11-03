@@ -7,6 +7,10 @@ import SwiftUI
 @MainActor
 struct BalancePanelView: View {
     let monitor: any BalanceMonitor
+    /// Set by the panel controller when a notification or toast is clicked.
+    /// Requests carry a sequence so repeated focus on one Account still
+    /// scrolls the panel back to it.
+    var focus: PanelFocusModel = PanelFocusModel()
     var onAddAccount: () -> Void = {}
     @State private var expansion = BalanceRowExpansion()
 
@@ -71,25 +75,51 @@ struct BalancePanelView: View {
 
             Divider()
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(rows) { row in
-                        BalanceRowView(
-                            account: row.account,
-                            viewState: BalanceRowPresentation.viewState(for: row, now: Date()),
-                            detail: BalanceRowPresentation.detailViewState(for: row),
-                            isExpanded: expansion.isExpanded(row.id),
-                            onToggle: { expansion.toggle(row.id) },
-                            onRefresh: { await monitor.refresh(accountID: row.id) }
-                        )
-                        Divider()
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(rows) { row in
+                            BalanceRowView(
+                                account: row.account,
+                                viewState: BalanceRowPresentation.viewState(for: row, now: Date()),
+                                detail: BalanceRowPresentation.detailViewState(for: row),
+                                isExpanded: expansion.isExpanded(row.id),
+                                onToggle: { expansion.toggle(row.id) },
+                                onRefresh: { await monitor.refresh(accountID: row.id) }
+                            )
+                            .id(row.id)
+                            Divider()
+                        }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 4)
+                .onChange(of: focus.request) { _, request in
+                    reveal(request, rows: rows, using: proxy)
+                }
+                .onAppear {
+                    reveal(focus.request, rows: rows, using: proxy)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Expands the requested row and scrolls it into view. The request is
+    /// ignored once the Account is no longer in the panel.
+    private func reveal(
+        _ request: PanelFocusModel.Request?,
+        rows: [BalanceRow],
+        using proxy: ScrollViewProxy
+    ) {
+        guard let request,
+              rows.contains(where: { $0.id == request.accountID }) else {
+            return
+        }
+        expansion.expand(request.accountID)
+        withAnimation(.easeInOut(duration: 0.2)) {
+            proxy.scrollTo(request.accountID, anchor: .center)
+        }
     }
 }
 

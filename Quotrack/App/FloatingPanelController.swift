@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class FloatingPanelController: PanelPresenting {
     private let panel: NSPanel
+    private let focus = PanelFocusModel()
 
     init(
         monitor: any BalanceMonitor,
@@ -24,7 +25,11 @@ final class FloatingPanelController: PanelPresenting {
         panel.isReleasedWhenClosed = false
         panel.becomesKeyOnlyIfNeeded = true
         let hostingView = NSHostingView(
-            rootView: BalancePanelView(monitor: monitor, onAddAccount: onAddAccount)
+            rootView: BalancePanelView(
+                monitor: monitor,
+                focus: focus,
+                onAddAccount: onAddAccount
+            )
         )
         hostingView.frame = NSRect(origin: .zero, size: contentSize)
         hostingView.autoresizingMask = [.width, .height]
@@ -68,6 +73,14 @@ final class FloatingPanelController: PanelPresenting {
 
     func show() {
         panel.orderFrontRegardless()
+    }
+
+    /// Reveals the panel and requests that the first affected Account row be
+    /// expanded and scrolled into view. The request survives a hidden panel
+    /// because the hosting view is already mounted.
+    func show(focusing accountID: Account.ID) {
+        focus.focus(accountID)
+        show()
     }
 
     func hide() {
