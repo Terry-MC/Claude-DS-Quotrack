@@ -9,8 +9,11 @@ A macOS menu-bar app with a floating panel that shows the remaining prepaid Bala
 - Real-key live verification completed for **DeepSeek** and **Moonshot (Kimi, domestic)**.
 - **SiliconFlow** and **OpenRouter** remain unverified pending live credentials; see `docs/manual/`.
 - The v1 spec (#1) and all implementation tickets (#2–#15) are closed.
+- **v2 in planning**: spec [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17), decisions in `docs/adr/0002-threshold-based-balance-and-quota.md`.
 
 ## Features
+
+The list below describes v1. See [v2 scope](#v2-scope-planned) for the planned changes.
 
 - Native SwiftUI + AppKit: menu-bar status item plus an `NSPanel` floating panel; no Dock icon.
 - Multiple Accounts per Provider, flat rows in creation order.
@@ -72,6 +75,8 @@ The generated `Quotrack.xcodeproj`, `.build/`, and `build/` are gitignored. `pro
 | SiliconFlow | API key | Domestic / International | `GET /v1/user/info` | Unverified (no key) |
 | OpenRouter | Management key | — | `GET /api/v1/credits` | Unverified (no management key) |
 
+This table describes v1. v2 removes SiliconFlow and adds Kimi Code subscription Quota; see [v2 scope](#v2-scope-planned).
+
 Unsupported by design: OpenAI, Anthropic, Google Gemini, Mistral, xAI, Zhipu, Alibaba Bailian, and Volcano Ark. See `docs/adr/0001-balance-capable-providers-only.md`. OpenAI/Anthropic/Gemini expose Spend or Quota rather than an individual Balance; Spend and Quota are separate Metric kinds, not Balances.
 
 ## Where data lives
@@ -108,18 +113,30 @@ Provider and Keychain checks that need real credentials are documented under `do
 - SiliconFlow and OpenRouter have fixture coverage only; live behavior is unverified until a real credential is supplied.
 - No Spend, Quota, history, trends, notifications, auto-update, or distribution/notarization in v1.
 
-## v2 candidates
+## v2 scope (planned)
 
-- Spend and Quota metrics for OpenAI, Anthropic, and Gemini (admin/cloud credentials).
-- xAI, Alibaba Bailian, and Volcano Ark adapters.
-- Low-Balance notifications and Balance history/trends.
-- Team signing, notarization, `/Applications` install, auto-update, App Store.
-- Account grouping, per-Account polling intervals, global hotkeys, themes.
-- Optional backend/sync for multiple Macs.
+v2 turns the panel into a threshold-based health monitor. The full spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17); the decisions are recorded in `docs/adr/0002-threshold-based-balance-and-quota.md`.
+
+**In scope**
+
+- Provider grouping and collapsible cards.
+- Two Account Kinds: Balance (充值账户) and Quota (订阅账户).
+- Balance Accounts show the current Balance and optional 预警线 / 紧急线 thresholds in the Account currency. No synthetic total-top-up or used-percentage bar.
+- Quota Accounts show remaining quota and optional remaining-percentage thresholds. Kimi Code is the only Quota product and is marked experimental.
+- Health states 正常 / 预警 / 紧急 / 未设置, Provider summaries, a dock badge, and notifications on health transitions.
+- Providers: DeepSeek, Moonshot (Balance and Kimi Code Quota), and OpenRouter.
+- Migration: v1 Accounts become Balance; `lowBalanceThreshold` becomes `warningThreshold`; SiliconFlow Accounts become unsupported.
+
+**Out of scope for v2**
+
+- SiliconFlow: its balance endpoint stopped serving in 2026-08; keep it only for decoding old Accounts.
+- WorkBuddy, Claude Pro/Max, ChatGPT/Codex, Gemini CLI, and SuperGrok: they require a local bridge to read desktop or CLI OAuth state.
+- OpenAI/Anthropic/Gemini organization-level Spend, Google Cloud Billing, Alibaba BSS, Volcano Ark, xAI, and Zhipu.
+- Points and Spend Account Kinds, history/trends, the prototype's undefined dashboard mode, and auto-update/notarization.
 
 ## Agent workflow
 
-- Read `CLAUDE.md`, `GLOSSARY.md`, `docs/adr/0001-balance-capable-providers-only.md`, and `docs/agents/*.md` first.
+- Read `CLAUDE.md`, `GLOSSARY.md`, `docs/adr/0001-balance-capable-providers-only.md`, `docs/adr/0002-threshold-based-balance-and-quota.md`, and `docs/agents/*.md` first.
 - Issues live in GitHub Issues; use the `gh` commands in `docs/agents/issue-tracker.md` and the `ready-for-agent` label.
 - The engineering skills follow `/grilling` → `/to-spec` → `/to-tickets` → `/implement-spec`, with TDD for every ticket.
-- For v2, start a new spec issue. Do not reuse the closed v1 spec (#1).
+- The v2 spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17). Do not reuse the closed v1 spec (#1).
