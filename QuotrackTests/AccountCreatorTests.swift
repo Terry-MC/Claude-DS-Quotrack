@@ -113,6 +113,42 @@ struct AccountCreatorTests {
     }
 
     @Test
+    func aSuccessfulSubscriptionConnectionSavesKindThresholdsAndNoCurrency() async throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let quota = QuotaSnapshot(
+            accountID: UUID(),
+            limit: 100,
+            remaining: 60,
+            fetchedAt: Date()
+        )
+        let tester = RecordingConnectionTester(
+            result: .success(AccountSnapshot.quota(quota))
+        )
+        let creator = AccountCreator(manager: manager, connectionTester: tester)
+        let draft = AccountDraft(
+            provider: .moonshot,
+            region: .domestic,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+
+        let account = try await creator.create(
+            draft,
+            thresholds: AccountThresholds(warning: 10)
+        )
+
+        #expect(account.kind == .subscription)
+        #expect(account.currency == nil)
+        #expect(account.warningThreshold == 10)
+        #expect(account.criticalThreshold == nil)
+        #expect(manager.accounts == [account])
+        #expect(store.loadAccounts() == [account])
+    }
+
+    @Test
     func openRouterWarnsAboutTheManagementKeyBeforeSave() {
         #expect(
             AccountFormPresentation.credentialWarning(for: .openRouter)
@@ -121,6 +157,12 @@ struct AccountCreatorTests {
         #expect(AccountFormPresentation.credentialWarning(for: .deepSeek) == nil)
         #expect(AccountFormPresentation.credentialWarning(for: .moonshot) == nil)
         #expect(AccountFormPresentation.credentialWarning(for: .siliconFlow) == nil)
+        #expect(
+            AccountFormPresentation.credentialWarning(
+                for: .moonshot,
+                kind: .subscription
+            ) == UIStrings.kimiCodeCredentialWarning
+        )
     }
 }
 

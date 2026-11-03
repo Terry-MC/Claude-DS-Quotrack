@@ -24,12 +24,35 @@ struct MockConnectionTester: ConnectionTesting {
     }
 
     func testConnection(_ draft: AccountDraft) async throws -> AccountSnapshot {
+        guard draft.provider.supportedKinds.contains(draft.kind) else {
+            throw BalanceProviderError.unsupportedAccountKind
+        }
+        let timestamp = now()
+        if draft.kind == .subscription {
+            return .quota(
+                QuotaSnapshot(
+                    accountID: UUID(),
+                    limit: 100,
+                    remaining: 60,
+                    resetAt: timestamp.addingTimeInterval(86_400),
+                    fetchedAt: timestamp,
+                    windows: [
+                        QuotaWindow(
+                            name: "5 小时窗口",
+                            limit: 100,
+                            remaining: 85,
+                            resetAt: timestamp.addingTimeInterval(3_600)
+                        ),
+                    ]
+                )
+            )
+        }
         let currency = draft.provider.defaultCurrency(for: draft.region) ?? .cny
         return .balance(
             BalanceSnapshot(
                 accountID: UUID(),
                 balance: Balance(amount: amount, currency: currency),
-                fetchedAt: now(),
+                fetchedAt: timestamp,
                 isAvailable: true
             )
         )
@@ -78,6 +101,12 @@ extension ProviderRegistryConnectionTester {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] =
                 BalanceCredentialAdapter(adapter: adapter)
         }
+        adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
+            KimiCodeAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            )
         return ProviderRegistryConnectionTester(adapters: adapters)
     }
 }

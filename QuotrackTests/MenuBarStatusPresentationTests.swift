@@ -5,7 +5,7 @@ struct MenuBarStatusPresentationTests {
     func normalStateShowsTheNormalIconAndDescription() {
         let viewState = MenuBarStatusPresentation.viewState(for: .normal)
 
-        #expect(viewState.symbolName == "dollarsign.circle.fill")
+        #expect(viewState.symbolName == "chart.bar.fill")
         #expect(viewState.accessibilityDescription == UIStrings.menuBarNormalDescription)
     }
 

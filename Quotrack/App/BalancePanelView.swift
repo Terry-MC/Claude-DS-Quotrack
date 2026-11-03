@@ -126,26 +126,69 @@ private struct BalanceRowView: View {
                                         in: Capsule()
                                     )
                             }
+                            if viewState.isExperimental {
+                                Text(UIStrings.experimentalBadge)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1)
+                                    .overlay(
+                                        Capsule()
+                                            .strokeBorder(
+                                                .secondary.opacity(0.35)
+                                            )
+                                    )
+                            }
                         }
                         Text(viewState.label)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
-                        BalanceThresholdGauge(
-                            account: account,
-                            health: viewState.health
-                        )
+                        if !viewState.isQuota {
+                            BalanceThresholdGauge(
+                                account: account,
+                                health: viewState.health
+                            )
+                        }
                         Text(viewState.thresholdText)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
+                        if viewState.isQuota,
+                           let ratio = viewState.quotaRemainingRatio {
+                            ProgressView(value: ratio)
+                                .tint(balanceColor)
+                                .controlSize(.small)
+                        }
+                        if let secondary = viewState.quotaSecondaryText {
+                            Text(secondary)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer(minLength: 12)
 
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(viewState.balanceText)
-                            .font(.title3)
-                            .monospacedDigit()
-                            .foregroundStyle(balanceColor)
+                        if viewState.isQuota {
+                            Text(viewState.quotaRemainingText ?? "—")
+                                .font(.title3)
+                                .monospacedDigit()
+                                .foregroundStyle(balanceColor)
+                            if let used = viewState.quotaUsedText {
+                                Text(used)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if let reset = viewState.quotaResetText {
+                                Text(reset)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } else {
+                            Text(viewState.balanceText)
+                                .font(.title3)
+                                .monospacedDigit()
+                                .foregroundStyle(balanceColor)
+                        }
                         HStack(spacing: 4) {
                             Text(viewState.updatedText)
                                 .foregroundStyle(.secondary)
@@ -273,6 +316,16 @@ private struct BalanceRowDetailView: View {
             }
             labelledValue(UIStrings.healthLabel, detail.healthText)
             labelledValue(UIStrings.thresholdLabel, detail.thresholdText)
+            if !detail.quotaLines.isEmpty {
+                Text(UIStrings.quotaDetailTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                ForEach(detail.quotaLines, id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .monospacedDigit()
+                }
+            }
             if let currencyWarningText = detail.currencyWarningText {
                 Text(currencyWarningText)
                     .font(.caption)
@@ -471,6 +524,57 @@ private struct BalanceRowDetailView: View {
     ]
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
         .frame(width: 360, height: 520)
+}
+
+#Preview("Kimi Code 订阅") {
+    BalancePanelView(monitor: PreviewBalanceMonitor(rows: makeKimiQuotaRows(now: Date())))
+        .frame(width: 360, height: 520)
+}
+
+private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
+    func quotaRow(
+        label: String,
+        region: Region,
+        remaining: Decimal,
+        warning: Decimal?,
+        critical: Decimal?
+    ) -> BalanceRow {
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            region: region,
+            kind: .subscription,
+            label: label,
+            warningThreshold: warning,
+            criticalThreshold: critical
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: remaining,
+            resetAt: now.addingTimeInterval(86_400),
+            fetchedAt: now,
+            windows: [
+                QuotaWindow(
+                    name: "5 小时窗口",
+                    limit: 100,
+                    remaining: min(100, remaining + 45),
+                    resetAt: now.addingTimeInterval(3_600)
+                ),
+            ]
+        )
+        return BalanceRow(
+            account: account,
+            snapshot: .quota(quota),
+            status: .fresh
+        )
+    }
+    return [
+        quotaRow(label: "国内 · 余量正常", region: .domestic, remaining: 80, warning: 20, critical: 10),
+        quotaRow(label: "国际 · 余量预警", region: .international, remaining: 15, warning: 20, critical: 10),
+        quotaRow(label: "国内 · 余量紧急", region: .domestic, remaining: 5, warning: 20, critical: 10),
+        quotaRow(label: "国际 · 未设置阈值", region: .international, remaining: 60, warning: nil, critical: nil),
+    ]
 }
 
 #Preview("展开详情") {

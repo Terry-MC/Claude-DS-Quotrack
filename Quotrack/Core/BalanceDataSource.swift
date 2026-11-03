@@ -44,8 +44,10 @@ extension BalanceDataSource {
         for provider in Provider.addableCases {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
         }
+        adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
+            MockQuotaProvider(now: now)
         return BalanceDataSource(
-            accounts: fixtures.map(\.account),
+            accounts: fixtures.map(\.account) + [MockFixtures.subscriptionAccount()],
             provider: ProviderRegistry(adapters: adapters)
         )
     }

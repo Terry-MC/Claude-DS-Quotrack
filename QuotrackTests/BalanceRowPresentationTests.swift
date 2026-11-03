@@ -78,6 +78,60 @@ struct BalanceRowPresentationTests {
     }
 
     @Test
+    func quotaRowShowsRemainingUsedResetAndExperimental() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let resetAt = Date(timeIntervalSince1970: 1_800_000_300)
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: 40,
+            resetAt: resetAt,
+            fetchedAt: now,
+            windows: [
+                QuotaWindow(
+                    name: "5 小时窗口",
+                    limit: 100,
+                    remaining: 80,
+                    resetAt: resetAt
+                ),
+            ]
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .quota(quota),
+            status: .fresh
+        )
+
+        let viewState = BalanceRowPresentation.viewState(for: row, now: now)
+
+        #expect(viewState.isQuota)
+        #expect(viewState.isExperimental)
+        #expect(viewState.quotaRemainingText == "剩余 40 / 100")
+        #expect(viewState.quotaUsedText == "已用 60%")
+        #expect(viewState.quotaResetText?.hasPrefix("额度重置") == true)
+        #expect(viewState.quotaSecondaryText == "5 小时窗口：剩余 80%")
+        #expect(abs((viewState.quotaRemainingRatio ?? 0) - 0.4) < 0.0001)
+        #expect(viewState.health == .normal)
+        #expect(viewState.thresholdText == "预警 20% · 紧急 10%")
+        #expect(viewState.showsHealth)
+
+        let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
+        #expect(detail.quotaLines.contains("剩余 40 / 100"))
+        #expect(detail.quotaLines.contains("已用 60%"))
+        #expect(detail.quotaLines.contains { $0.hasPrefix("额度重置") })
+        #expect(detail.quotaLines.contains("5 小时窗口：剩余 80%"))
+        #expect(detail.fetchedAtText != nil)
+    }
+
+    @Test
     func detailWarnsWhenThresholdCurrencyDiffersFromTheSnapshot() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let account = Account(

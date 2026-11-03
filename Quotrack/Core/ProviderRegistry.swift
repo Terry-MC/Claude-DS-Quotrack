@@ -45,6 +45,12 @@ extension ProviderRegistry {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] =
                 BalanceProviderAdapter(provider: adapter)
         }
+        adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
+            KimiCodeAdapter(
+                transport: transport,
+                credentialStore: credentialStore,
+                now: now
+            )
         return ProviderRegistry(adapters: adapters)
     }
 }

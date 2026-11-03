@@ -53,6 +53,31 @@ struct AggregateStateTests {
     }
 
     @Test
+    func aCriticalQuotaRaisesTheAggregateToCritical() {
+        let account = Account(
+            id: UUID(),
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+        let quota = QuotaSnapshot(
+            accountID: account.id,
+            limit: 100,
+            remaining: 5,
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let row = BalanceRow(
+            account: account,
+            snapshot: .quota(quota),
+            status: .fresh
+        )
+
+        #expect(AggregateBalanceState.derive(from: [row]) == .critical)
+    }
+
+    @Test
     func aStaleSnapshotKeepsItsCriticalHealthInTheAggregate() {
         let rows = [
             makeRow(

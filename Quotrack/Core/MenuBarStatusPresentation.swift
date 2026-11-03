@@ -11,7 +11,7 @@ enum MenuBarStatusPresentation {
         switch state {
         case .normal:
             MenuBarStatusViewState(
-                symbolName: "dollarsign.circle.fill",
+                symbolName: "chart.bar.fill",
                 accessibilityDescription: UIStrings.menuBarNormalDescription
             )
         case .warning:

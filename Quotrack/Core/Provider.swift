@@ -41,8 +41,10 @@ enum Provider: String, Codable, Sendable, Equatable, Hashable, CaseIterable {
     /// Code subscription kind when that adapter lands.
     var supportedKinds: [AccountKind] {
         switch self {
-        case .deepSeek, .moonshot, .openRouter:
+        case .deepSeek, .openRouter:
             [.balance]
+        case .moonshot:
+            [.balance, .subscription]
         case .siliconFlow:
             []
         }

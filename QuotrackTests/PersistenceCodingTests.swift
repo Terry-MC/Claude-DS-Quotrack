@@ -114,6 +114,14 @@ struct PersistenceCodingTests {
                     remaining: 60,
                     expiresAt: resetAt
                 ),
+            ],
+            windows: [
+                QuotaWindow(
+                    name: "5 小时窗口",
+                    limit: 100,
+                    remaining: 85,
+                    resetAt: resetAt
+                ),
             ]
         )
 
@@ -123,6 +131,7 @@ struct PersistenceCodingTests {
         #expect(decoded == snapshot)
         #expect(decoded.used == 40)
         #expect(decoded.usedRatio == Decimal(string: "0.4"))
+        #expect(decoded.windows?.first?.name == "5 小时窗口")
     }
 
     @Test

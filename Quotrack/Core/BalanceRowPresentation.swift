@@ -42,6 +42,13 @@ struct BalanceRowViewState: Identifiable, Equatable, Sendable {
     /// no snapshot, no thresholds, or a currency/kind mismatch). The threshold
     /// text and detail still explain why.
     let showsHealth: Bool
+    let isQuota: Bool
+    let quotaRemainingText: String?
+    let quotaUsedText: String?
+    let quotaResetText: String?
+    let quotaSecondaryText: String?
+    let quotaRemainingRatio: Double?
+    let isExperimental: Bool
 }
 
 /// One breakdown line in an expanded row.
@@ -65,6 +72,9 @@ struct BalanceRowDetailViewState: Equatable, Sendable {
     let breakdown: [BalanceBreakdownViewState]
     let healthText: String
     let thresholdText: String
+    /// Expanded Quota detail: remaining/limit, used percentage, reset time,
+    /// and secondary windows.
+    let quotaLines: [String]
     /// Set when the Account's threshold currency no longer matches the
     /// Snapshot currency, so Health is not evaluated.
     let currencyWarningText: String?
@@ -79,6 +89,8 @@ enum BalanceRowPresentation {
         let status = row.isUnsupported ? SnapshotStatus.unsupported : row.status
         let health = health(for: row)
         let thresholds = row.account.thresholds
+        let quota = row.quotaSnapshot
+        let isQuota = row.account.kind == .subscription
         let showsHealth = !row.isUnsupported
             && row.error == nil
             && row.status != .error
@@ -102,7 +114,34 @@ enum BalanceRowPresentation {
             health: health,
             healthText: health.displayText,
             thresholdText: thresholdText(for: row),
-            showsHealth: showsHealth
+            showsHealth: showsHealth,
+            isQuota: isQuota,
+            quotaRemainingText: quota.map {
+                "剩余 \(decimalText($0.remaining)) / \(decimalText($0.limit))"
+            },
+            quotaUsedText: quota.map {
+                "已用 \(percentText(usedPercent($0)))"
+            },
+            quotaResetText: quota?.resetAt.map {
+                "额度重置 \(quotaDateText($0))"
+            },
+            quotaSecondaryText: quota?.windows.flatMap { windows in
+                guard !windows.isEmpty else {
+                    return nil
+                }
+                return windows.map { window in
+                    let ratio = window.limit > 0
+                        ? window.remaining / window.limit * 100
+                        : 0
+                    return "\(window.name)：剩余 \(percentText(ratio))"
+                }.joined(separator: " · ")
+            },
+            quotaRemainingRatio: quota.map {
+                let clamped = max(Decimal(0), min($0.remainingRatio, Decimal(1)))
+                return NSDecimalNumber(decimal: clamped).doubleValue
+            },
+            isExperimental: row.account.provider == .moonshot
+                && row.account.kind == .subscription
         )
     }
 
@@ -175,6 +214,25 @@ enum BalanceRowPresentation {
         return "\(symbol)\(value)"
     }
 
+    private static func decimalText(_ value: Decimal) -> String {
+        value.formatted(
+            .number.precision(.fractionLength(0...2)).locale(amountLocale)
+        )
+    }
+
+    private static func percentText(_ value: Decimal) -> String {
+        value.formatted(
+            .number.precision(.fractionLength(0...1)).locale(amountLocale)
+        ) + "%"
+    }
+
+    private static func quotaDateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: date)
+    }
+
     static func detailViewState(
         for row: BalanceRow,
         timeZone: TimeZone = .current
@@ -188,6 +246,7 @@ enum BalanceRowPresentation {
                 breakdown: [],
                 healthText: AccountHealth.unset.displayText,
                 thresholdText: thresholdText(for: row),
+                quotaLines: [],
                 currencyWarningText: nil
             )
         }
@@ -196,7 +255,9 @@ enum BalanceRowPresentation {
         return BalanceRowDetailViewState(
             accountID: row.id,
             balanceText: snapshot.map(preciseBalanceText(for:)),
-            fetchedAtText: snapshot.map { exactTimeText(for: $0.fetchedAt, timeZone: timeZone) },
+            fetchedAtText: row.snapshot.map {
+                exactTimeText(for: $0.fetchedAt, timeZone: timeZone)
+            },
             errorText: row.error.map { $0.userMessage(for: row.account.provider) },
             breakdown: (snapshot?.breakdown ?? []).map { item in
                 BalanceBreakdownViewState(
@@ -207,8 +268,34 @@ enum BalanceRowPresentation {
             },
             healthText: health.displayText,
             thresholdText: thresholdText(for: row),
+            quotaLines: quotaLines(for: row),
             currencyWarningText: currencyWarning(for: row)
         )
+    }
+
+    private static func quotaLines(for row: BalanceRow) -> [String] {
+        guard let quota = row.quotaSnapshot else {
+            return []
+        }
+        var lines = [
+            "剩余 \(decimalText(quota.remaining)) / \(decimalText(quota.limit))",
+            "已用 \(percentText(usedPercent(quota)))",
+        ]
+        if let resetAt = quota.resetAt {
+            lines.append("额度重置 \(quotaDateText(resetAt))")
+        }
+        for window in quota.windows ?? [] {
+            let ratio = window.limit > 0
+                ? window.remaining / window.limit * 100
+                : 0
+            lines.append("\(window.name)：剩余 \(percentText(ratio))")
+        }
+        return lines
+    }
+
+    private static func usedPercent(_ quota: QuotaSnapshot) -> Decimal {
+        let remaining = max(Decimal(0), min(quota.remainingRatio, Decimal(1)))
+        return (Decimal(1) - remaining) * 100
     }
 
     private static func currencyWarning(for row: BalanceRow) -> String? {

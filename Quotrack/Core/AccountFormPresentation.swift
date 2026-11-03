@@ -4,7 +4,16 @@ import Foundation
 /// warning must appear before the user saves, because OpenRouter rejects an
 /// ordinary inference key with a permission failure only after a round trip.
 enum AccountFormPresentation {
-    static func credentialWarning(for provider: Provider) -> String? {
-        provider == .openRouter ? UIStrings.openRouterManagementKeyWarning : nil
+    static func credentialWarning(
+        for provider: Provider,
+        kind: AccountKind = .balance
+    ) -> String? {
+        if provider == .openRouter {
+            return UIStrings.openRouterManagementKeyWarning
+        }
+        if provider == .moonshot && kind == .subscription {
+            return UIStrings.kimiCodeCredentialWarning
+        }
+        return nil
     }
 }

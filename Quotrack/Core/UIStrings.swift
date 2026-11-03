@@ -7,8 +7,8 @@ enum UIStrings {
 
     // Menu bar aggregate state
     static let menuBarNormalDescription = "Quotrack：一切正常"
-    static let menuBarWarningDescription = "Quotrack：有账户余额偏低或数据已过期"
-    static let menuBarCriticalDescription = "Quotrack：有账户余额紧急"
+    static let menuBarWarningDescription = "Quotrack：有账户需要关注"
+    static let menuBarCriticalDescription = "Quotrack：有账户需要立即处理"
     static let menuBarErrorDescription = "Quotrack：有账户出错"
 
     // Breakdown labels
@@ -48,6 +48,7 @@ enum UIStrings {
     static let criticalThresholdPercentLabel = "余量紧急线（%）"
     static let healthLabel = "健康"
     static let thresholdLabel = "阈值"
+    static let quotaDetailTitle = "额度"
 
     static func currencyMismatchWarning(
         thresholdCurrency: String,
@@ -88,25 +89,28 @@ enum UIStrings {
     static let launchAtLoginHint = "默认关闭。开启后 Quotrack 会在登录时自动启动。"
     static let launchAtLoginRequiresApproval = "已请求开机启动，请在“系统设置 › 通用 › 登录项”中允许 Quotrack。"
     static let openLoginItemsSettings = "打开系统设置"
-    static let settingsUnsupportedTitle = "不可查厂商"
+    static let settingsUnsupportedTitle = "厂商支持说明"
     static let unsupportedProvidersExplanation = """
-    SiliconFlow 的个人余额接口已停止服务，已有账户会显示为“不再支持”，不会轮询，可以删除。OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此不会出现在可添加厂商中。余额与消耗、配额是不同指标，详见 ADR-0001 与 ADR-0002。
+    Quotrack 支持个人余额 API，也支持 Moonshot 的 Kimi Code 订阅额度（实验性）。SiliconFlow 的个人余额接口已停止服务，已有账户会显示为“不再支持”，不会轮询，可以删除。OpenAI、Anthropic、Gemini 和 Mistral 不提供个人账户余额 API，只能查询消耗或配额，因此不会出现在可添加厂商中。余额、消耗、额度是不同指标，详见 ADR-0001 与 ADR-0002。
     """
     static let settingsDeferredIntegrationsExplanation = """
     WorkBuddy、Claude Pro/Max、ChatGPT/Codex、Gemini CLI 和 SuperGrok 需要读取桌面应用或 CLI 的 OAuth 登录状态，v2 暂不支持。Quotrack 不会读取浏览器 Cookie、桌面容器或 CLI 凭证；相关本地桥接计划见 ADR-0002。
     """
     static let invalidThreshold = "阈值无效：请检查数值范围，并确保紧急线低于预警线。"
+    static let deleteAccountConfirmation = "该账户的钥匙串凭证和已保存的余额/额度快照都会被移除。"
 
     // Onboarding
     static let onboardingTitle = "欢迎使用 Quotrack"
     static let onboardingProviderTitle = "选择厂商"
-    static let onboardingProviderHint = "仅支持提供个人账户余额 API 的厂商。"
+    static let onboardingProviderHint = "支持个人余额 API，以及 Moonshot 的 Kimi Code 订阅额度（实验性）。"
     static let onboardingRegionTitle = "选择区域"
     static let onboardingRegionHint = "凭证只在所选区域内有效。"
     static let onboardingDetailsTitle = "账户信息"
     static let onboardingLabelField = "标签"
     static let onboardingCredentialField = "API 密钥"
     static let openRouterManagementKeyWarning = "OpenRouter 只能使用管理密钥，普通推理密钥无法查询余额。管理密钥权限更高，请妥善保管。"
+    static let kimiCodeCredentialWarning = "Kimi Code 订阅账户使用 sk-kimi-… 密钥，不是 Moonshot 开放平台密钥。"
+    static let experimentalBadge = "实验性"
     static let onboardingNext = "下一步"
     static let onboardingBack = "上一步"
     static let onboardingTestAndSave = "测试连接并保存"

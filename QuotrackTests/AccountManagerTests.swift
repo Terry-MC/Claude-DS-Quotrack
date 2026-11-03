@@ -80,6 +80,27 @@ struct AccountManagerTests {
     }
 
     @Test
+    func addingAProviderKindPairTheProviderDoesNotSupportIsRejected() throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let draft = AccountDraft(
+            provider: .deepSeek,
+            label: "DeepSeek 订阅",
+            credential: "sk-deepseek",
+            kind: .subscription
+        )
+
+        #expect(throws: AccountManagerError.unsupportedAccountKind) {
+            try manager.addAccount(draft)
+        }
+
+        #expect(manager.accounts.isEmpty)
+        #expect(store.loadAccounts().isEmpty)
+        #expect(credentials.saveCallCount == 0)
+    }
+
+    @Test
     func addingAnAccountStoresTheCredentialOnlyInTheCredentialStore() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

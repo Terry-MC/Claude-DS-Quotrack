@@ -23,6 +23,26 @@ struct ConnectionTesterTests {
     }
 
     @Test
+    func mockConnectionTestingReturnsAQuotaForSubscriptionDrafts() async throws {
+        let tester = MockConnectionTester(
+            now: { Date(timeIntervalSince1970: 1_800_000_000) }
+        )
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+
+        let snapshot = try await tester.testConnection(draft)
+        let quota = try #require(snapshot.quotaSnapshot)
+
+        #expect(quota.limit == 100)
+        #expect(quota.remaining == 60)
+        #expect(quota.windows?.first?.name == "5 小时窗口")
+    }
+
+    @Test
     func theLiveTesterRoutesByProviderAndKind() async throws {
         let balanceSnapshot = BalanceSnapshot(
             accountID: UUID(),

@@ -4,8 +4,8 @@ import Testing
 /// keys stay Provider-defined, but domain labels must match GLOSSARY.md.
 struct GlossaryStringsTests {
     @Test
-    func unsupportedProvidersUseTheGlossaryTerm() {
-        #expect(UIStrings.settingsUnsupportedTitle == "不可查厂商")
+    func settingsNamesTheProviderSupportSection() {
+        #expect(UIStrings.settingsUnsupportedTitle == "厂商支持说明")
     }
 
     @Test
@@ -13,6 +13,7 @@ struct GlossaryStringsTests {
         let unsupported = UIStrings.unsupportedProvidersExplanation
         let deferred = UIStrings.settingsDeferredIntegrationsExplanation
 
+        #expect(unsupported.contains("Kimi Code"))
         #expect(unsupported.contains("SiliconFlow"))
         #expect(unsupported.contains(UIStrings.unsupportedProviderState))
         #expect(unsupported.contains("OpenAI"))

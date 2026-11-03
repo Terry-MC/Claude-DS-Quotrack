@@ -29,7 +29,10 @@ final class OnboardingModel {
     /// Warning shown before the credential is entered or saved. Currently only
     /// OpenRouter needs a management key instead of an inference key.
     var credentialWarning: String? {
-        AccountFormPresentation.credentialWarning(for: selectedProvider)
+        AccountFormPresentation.credentialWarning(
+            for: selectedProvider,
+            kind: selectedKind
+        )
     }
 
     @ObservationIgnored private let accountManager: AccountManager

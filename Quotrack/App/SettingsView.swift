@@ -59,7 +59,7 @@ struct SettingsView: View {
                 accountPendingDeletion = nil
             }
         } message: {
-            Text("该账户的钥匙串凭证和已保存的余额快照都会被移除。")
+            Text(UIStrings.deleteAccountConfirmation)
         }
     }
 

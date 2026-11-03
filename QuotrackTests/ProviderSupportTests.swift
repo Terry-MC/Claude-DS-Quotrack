@@ -16,6 +16,7 @@ struct ProviderSupportTests {
         #expect(Provider.deepSeek.isLegacyUnsupported == false)
         #expect(Provider.siliconFlow.supportedKinds.isEmpty)
         #expect(Provider.deepSeek.supportedKinds == [.balance])
+        #expect(Provider.moonshot.supportedKinds == [.balance, .subscription])
     }
 
     @Test

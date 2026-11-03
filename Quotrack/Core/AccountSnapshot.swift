@@ -23,6 +23,29 @@ struct QuotaPackage: Codable, Equatable, Sendable, Identifiable {
     var id: String { name }
 }
 
+/// A secondary quota window, such as Kimi Code's rolling 5-hour limit. The
+/// weekly quota remains the primary QuotaSnapshot metric.
+struct QuotaWindow: Codable, Equatable, Sendable, Identifiable {
+    let name: String
+    let limit: Decimal
+    let remaining: Decimal
+    let resetAt: Date?
+
+    init(
+        name: String,
+        limit: Decimal,
+        remaining: Decimal,
+        resetAt: Date? = nil
+    ) {
+        self.name = name
+        self.limit = limit
+        self.remaining = remaining
+        self.resetAt = resetAt
+    }
+
+    var id: String { name }
+}
+
 /// The result of one quota query for one Account at one point in time: the
 /// allowance, what remains, and when the window resets. A Quota is a different
 /// Metric from a Balance and is never displayed as money.
@@ -33,6 +56,8 @@ struct QuotaSnapshot: Codable, Equatable, Sendable {
     let resetAt: Date?
     let fetchedAt: Date
     let packages: [QuotaPackage]?
+    /// Secondary windows that do not drive Health, such as the 5-hour window.
+    let windows: [QuotaWindow]?
 
     init(
         accountID: Account.ID,
@@ -40,7 +65,8 @@ struct QuotaSnapshot: Codable, Equatable, Sendable {
         remaining: Decimal,
         resetAt: Date? = nil,
         fetchedAt: Date,
-        packages: [QuotaPackage]? = nil
+        packages: [QuotaPackage]? = nil,
+        windows: [QuotaWindow]? = nil
     ) {
         self.accountID = accountID
         self.limit = limit
@@ -48,6 +74,7 @@ struct QuotaSnapshot: Codable, Equatable, Sendable {
         self.resetAt = resetAt
         self.fetchedAt = fetchedAt
         self.packages = packages
+        self.windows = windows
     }
 
     var used: Decimal {

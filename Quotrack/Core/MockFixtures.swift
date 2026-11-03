@@ -16,6 +16,19 @@ enum MockOutcome: Equatable, Sendable {
 /// typed error categories, a Stale Snapshot, and a legacy SiliconFlow Account
 /// that must render as unsupported.
 enum MockFixtures {
+    /// A Quota fixture outside the Balance fixture list. Mock mode appends it
+    /// so the Kimi Code row, badge, progress bar, and reset text are visible.
+    static func subscriptionAccount() -> Account {
+        Account(
+            id: UUID(uuidString: "99999999-9999-9999-9999-999999999999")!,
+            provider: .moonshot,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+    }
+
     static func standard(now: Date) -> [MockFixture] {
         [
             fixture(

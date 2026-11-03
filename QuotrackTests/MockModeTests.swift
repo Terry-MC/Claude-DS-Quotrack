@@ -94,11 +94,11 @@ struct MockModeTests {
         await monitor.refresh()
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
-        #expect(header.healthyCount == 0)
+        #expect(header.healthyCount == 1)
         #expect(header.warningCount == 2)
         #expect(header.criticalCount == 0)
         #expect(header.errorCount == 7)
-        #expect(header.healthyText == "正常 0")
+        #expect(header.healthyText == "正常 1")
         #expect(header.warningText == "预警 2")
         #expect(header.errorText == "错误 7")
     }
@@ -184,7 +184,7 @@ struct MockModeTests {
         let mockSource = BalanceDataSource.make(mode: .mock, now: now)
         let liveSource = BalanceDataSource.make(mode: .live, now: now)
 
-        #expect(mockSource.accounts.count == 12)
+        #expect(mockSource.accounts.count == 13)
         #expect(Set(mockSource.accounts.map(\.provider)) == Set(Provider.allCases))
         #expect(liveSource.accounts.isEmpty)
     }

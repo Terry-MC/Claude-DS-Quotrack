@@ -29,6 +29,9 @@ final class AccountManager {
         guard !draft.credential.isEmpty else {
             throw AccountManagerError.missingCredential
         }
+        guard draft.provider.supportedKinds.contains(draft.kind) else {
+            throw AccountManagerError.unsupportedAccountKind
+        }
         let resolvedThresholds = thresholds
             ?? AccountThresholds.defaults(for: draft.kind)
         do {
@@ -133,6 +136,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
     case missingLabel
     case missingCredential
     case invalidThreshold
+    case unsupportedAccountKind
 
     var errorDescription: String? {
         switch self {
@@ -140,6 +144,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
         case .invalidThreshold: UIStrings.invalidThreshold
+        case .unsupportedAccountKind: "该厂商不支持此账户类型。"
         }
     }
 }

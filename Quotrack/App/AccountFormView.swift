@@ -100,7 +100,10 @@ struct AccountFormView: View {
 
                 TextField("标签", text: $label)
                 SecureField(credentialFieldLabel, text: $credential)
-                if let warning = AccountFormPresentation.credentialWarning(for: provider) {
+                if let warning = AccountFormPresentation.credentialWarning(
+                    for: provider,
+                    kind: kind
+                ) {
                     Text(warning)
                         .font(.caption)
                         .foregroundStyle(.orange)
@@ -161,7 +164,8 @@ struct AccountFormView: View {
                 if !newProvider.supportedKinds.contains(kind) {
                     kind = newProvider.supportedKinds.first ?? .balance
                     applyDefaults(for: kind)
-                } else if newProvider.defaultCurrency(for: region) != oldCurrency {
+                } else if kind == .balance,
+                          newProvider.defaultCurrency(for: region) != oldCurrency {
                     applyDefaults(for: kind)
                 }
             }
@@ -174,7 +178,8 @@ struct AccountFormView: View {
             set: { newRegion in
                 let oldCurrency = provider.defaultCurrency(for: region)
                 region = newRegion
-                if provider.defaultCurrency(for: newRegion) != oldCurrency {
+                if kind == .balance,
+                   provider.defaultCurrency(for: newRegion) != oldCurrency {
                     applyDefaults(for: kind)
                 }
             }
