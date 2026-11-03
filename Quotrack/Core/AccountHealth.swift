@@ -26,45 +26,57 @@ enum AccountHealth: Int, Comparable, Sendable {
 /// Snapshot; freshness and fetch errors remain outside this type.
 enum AccountHealthEvaluator {
     static func health(for account: Account, snapshot: AccountSnapshot?) -> AccountHealth {
-        guard let snapshot else {
+        guard let snapshot,
+              let value = metricValue(for: account, snapshot: snapshot) else {
             return .unset
         }
+        return health(value: value, thresholds: account.thresholds, kind: account.kind)
+    }
+
+    /// The numeric value Health compares against Thresholds. It is nil when the
+    /// Snapshot cannot produce one: wrong Metric kind, unavailable Balance,
+    /// currency mismatch, zero Quota limit, no thresholds, or an invalid pair.
+    /// The notification detector uses the same value so display and alerts
+    /// cannot disagree about what an Account is measuring.
+    static func metricValue(
+        for account: Account,
+        snapshot: AccountSnapshot
+    ) -> Decimal? {
         let thresholds = account.thresholds
-        do {
-            try thresholds.validate(for: account.kind)
-        } catch {
-            return .unset
+        guard (try? thresholds.validate(for: account.kind)) != nil,
+              thresholds.warning != nil || thresholds.critical != nil else {
+            return nil
         }
         switch account.kind {
         case .balance:
             guard let balanceSnapshot = snapshot.balanceSnapshot,
                   balanceSnapshot.isAvailable else {
-                return .unset
+                return nil
             }
             if let currency = account.currency,
                currency != balanceSnapshot.balance.currency {
-                return .unset
+                return nil
             }
-            return evaluate(value: balanceSnapshot.balance.amount, thresholds: thresholds)
+            return balanceSnapshot.balance.amount
         case .subscription:
             guard let quota = snapshot.quotaSnapshot, quota.limit > 0 else {
-                return .unset
+                return nil
             }
-            return evaluate(value: quota.remainingPercent, thresholds: thresholds)
+            return quota.remainingPercent
         }
     }
 
-    /// Provider Health is the worst Account Health. An unset Account does not
-    /// raise the Provider's severity.
-    static func worst(_ healths: [AccountHealth]) -> AccountHealth {
-        healths.max() ?? .unset
-    }
-
-    private static func evaluate(
+    /// Applies the raw thresholds: at or below the critical line is critical,
+    /// at or below the warning line is warning, otherwise normal. Hysteresis is
+    /// layered on top by `HealthHysteresis`, not here: the panel and menu bar
+    /// keep showing the threshold-derived Health.
+    static func health(
         value: Decimal,
-        thresholds: AccountThresholds
+        thresholds: AccountThresholds,
+        kind: AccountKind
     ) -> AccountHealth {
-        guard thresholds.warning != nil || thresholds.critical != nil else {
+        guard (try? thresholds.validate(for: kind)) != nil,
+              thresholds.warning != nil || thresholds.critical != nil else {
             return .unset
         }
         if let critical = thresholds.critical, value <= critical {
@@ -74,6 +86,12 @@ enum AccountHealthEvaluator {
             return .warning
         }
         return .normal
+    }
+
+    /// Provider Health is the worst Account Health. An unset Account does not
+    /// raise the Provider's severity.
+    static func worst(_ healths: [AccountHealth]) -> AccountHealth {
+        healths.max() ?? .unset
     }
 }
 

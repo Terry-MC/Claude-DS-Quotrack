@@ -31,4 +31,21 @@ struct BalanceRowExpansionTests {
         #expect(!expansion.isExpanded(first))
         #expect(expansion.isExpanded(second))
     }
+
+    @Test
+    func expandOpensARowWithoutClosingOtherExpandedRows() {
+        let first = UUID()
+        let second = UUID()
+        var expansion = BalanceRowExpansion()
+
+        expansion.expand(first)
+        expansion.expand(second)
+        #expect(expansion.isExpanded(first))
+        #expect(expansion.isExpanded(second))
+
+        // Expanding an already expanded row is idempotent; focus must not
+        // collapse the row a notification points at.
+        expansion.expand(first)
+        #expect(expansion.isExpanded(first))
+    }
 }

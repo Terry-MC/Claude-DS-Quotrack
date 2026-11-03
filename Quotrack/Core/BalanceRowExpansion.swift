@@ -16,4 +16,11 @@ struct BalanceRowExpansion: Equatable, Sendable {
             expandedAccountIDs.insert(accountID)
         }
     }
+
+    /// Opens one row without collapsing any other. Notification focus uses
+    /// this so revealing the affected Account is never a toggle that could
+    /// close it.
+    mutating func expand(_ accountID: Account.ID) {
+        expandedAccountIDs.insert(accountID)
+    }
 }

@@ -107,6 +107,10 @@ final class LiveBalanceMonitor: BalanceMonitor {
     private var isPollingActive = false
     private var isSleeping = false
     private(set) var rows: [BalanceRow]
+    /// Receives exactly one callback after every completed refresh, once all
+    /// rows have been applied. It never fires per row, so a poll can produce
+    /// at most one aggregated notification.
+    var healthNotificationSink: (any HealthNotificationSink)?
 
     /// The menu bar observes this property, so a row change updates the icon
     /// even while the panel is hidden.
@@ -408,6 +412,8 @@ final class LiveBalanceMonitor: BalanceMonitor {
                 apply(result)
             }
         }
+        // One callback for the whole batch, after every row has been applied.
+        healthNotificationSink?.pollDidComplete(rows: rows)
     }
 
     private nonisolated static func fetch(
