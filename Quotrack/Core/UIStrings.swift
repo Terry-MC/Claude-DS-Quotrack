@@ -156,4 +156,16 @@ enum UIStrings {
     static let onboardingSuccess = "连接成功，账户已保存。"
     static let onboardingDone = "完成"
     static let onboardingCredentialHint = "凭证只存储在 macOS 钥匙串中，保存后不会再次显示。"
+
+    // Dock
+    static let dockNormalDescription = "Quotrack：一切正常"
+    static let dockOpenPanelHint = "打开 Quotrack 主面板"
+
+    static func dockWarningDescription(count: Int) -> String {
+        "Quotrack：\(count) 个账户需要关注"
+    }
+
+    static func dockCriticalDescription(count: Int) -> String {
+        "Quotrack：\(count) 个账户需要立即处理"
+    }
 }
