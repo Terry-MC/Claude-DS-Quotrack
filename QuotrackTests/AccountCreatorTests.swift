@@ -35,7 +35,7 @@ struct AccountCreatorTests {
         let store = InMemorySnapshotStore()
         let credentials = InMemoryCredentialStore()
         let manager = AccountManager(store: store, credentialStore: credentials)
-        let tester = RecordingConnectionTester(result: .success(makeSnapshot()))
+        let tester = RecordingConnectionTester(balanceResult: .success(makeSnapshot()))
         let creator = AccountCreator(manager: manager, connectionTester: tester)
         let draft = AccountDraft(
             provider: .moonshot,
@@ -63,7 +63,7 @@ struct AccountCreatorTests {
         let store = InMemorySnapshotStore()
         let credentials = InMemoryCredentialStore()
         let manager = AccountManager(store: store, credentialStore: credentials)
-        let tester = RecordingConnectionTester(result: .success(makeSnapshot()))
+        let tester = RecordingConnectionTester(balanceResult: .success(makeSnapshot()))
         let creator = AccountCreator(manager: manager, connectionTester: tester)
         let draft = AccountDraft(
             provider: .deepSeek,

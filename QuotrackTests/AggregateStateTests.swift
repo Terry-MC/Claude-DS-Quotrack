@@ -232,12 +232,14 @@ private func makeRow(
         label: "账户",
         lowBalanceThreshold: threshold.flatMap { Decimal(string: $0) }
     )
-    let snapshot = status.map { status in
-        BalanceSnapshot(
-            accountID: account.id,
-            balance: Balance(amount: Decimal(string: amount)!, currency: .cny),
-            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
-            isAvailable: isAvailable
+    let snapshot = status.map { _ in
+        AccountSnapshot.balance(
+            BalanceSnapshot(
+                accountID: account.id,
+                balance: Balance(amount: Decimal(string: amount)!, currency: .cny),
+                fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+                isAvailable: isAvailable
+            )
         )
     }
     return BalanceRow(account: account, snapshot: snapshot, status: status, error: error)

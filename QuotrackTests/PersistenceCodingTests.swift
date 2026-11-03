@@ -70,6 +70,33 @@ struct PersistenceCodingTests {
     }
 
     @Test
+    func quotaSnapshotRoundTripsAndDerivesUsage() throws {
+        let resetAt = Date(timeIntervalSince1970: 1_800_000_300)
+        let snapshot = QuotaSnapshot(
+            accountID: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
+            limit: 100,
+            remaining: 60,
+            resetAt: resetAt,
+            fetchedAt: Date(timeIntervalSince1970: 1_800_000_000),
+            packages: [
+                QuotaPackage(
+                    name: "Kimi Code",
+                    limit: 100,
+                    remaining: 60,
+                    expiresAt: resetAt
+                ),
+            ]
+        )
+
+        let data = try JSONEncoder().encode(snapshot)
+        let decoded = try JSONDecoder().decode(QuotaSnapshot.self, from: data)
+
+        #expect(decoded == snapshot)
+        #expect(decoded.used == 40)
+        #expect(decoded.usedRatio == Decimal(string: "0.4"))
+    }
+
+    @Test
     func balanceSnapshotBreakdownRoundTripsThroughJSON() throws {
         let snapshot = BalanceSnapshot(
             accountID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,

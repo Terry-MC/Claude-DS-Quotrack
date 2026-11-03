@@ -212,7 +212,7 @@ private func makeContext(
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
-    let tester = RecordingConnectionTester(result: testerResult)
+    let tester = RecordingConnectionTester(balanceResult: testerResult)
     let model = OnboardingModel(accountManager: manager, connectionTester: tester)
     return OnboardingContext(
         model: model,
@@ -230,7 +230,7 @@ private func makeContext(
     let store = InMemorySnapshotStore()
     let credentials = InMemoryCredentialStore()
     let manager = AccountManager(store: store, credentialStore: credentials)
-    let tester = RecordingConnectionTester(results: testerResults)
+    let tester = RecordingConnectionTester(balanceResults: testerResults)
     let model = OnboardingModel(accountManager: manager, connectionTester: tester)
     return OnboardingContext(
         model: model,

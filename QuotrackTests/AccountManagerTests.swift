@@ -182,7 +182,7 @@ struct AccountManagerTests {
         #expect(store.loadAccounts() == [account])
         let storedCredential = try credentials.credential(for: account.id)
         #expect(storedCredential == "sk-new")
-        #expect(store.loadSnapshots() == [account.id: snapshot])
+        #expect(store.loadBalanceSnapshots() == [account.id: snapshot])
     }
 
     @Test
@@ -224,7 +224,7 @@ struct AccountManagerTests {
         #expect(deletedCredential == nil)
         let keptCredential = try credentials.credential(for: kept.id)
         #expect(keptCredential == "sk-keep")
-        #expect(store.loadSnapshots() == [kept.id: keptSnapshot])
+        #expect(store.loadBalanceSnapshots() == [kept.id: keptSnapshot])
     }
 
     @Test

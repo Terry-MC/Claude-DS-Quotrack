@@ -263,21 +263,25 @@ private struct BalanceRowDetailView: View {
     let rows = [
         BalanceRow(
             account: freshAccount,
-            snapshot: BalanceSnapshot(
-                accountID: freshAccount.id,
-                balance: Balance(amount: Decimal(string: "128.40")!, currency: .cny),
-                fetchedAt: now.addingTimeInterval(-120),
-                isAvailable: true
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: freshAccount.id,
+                    balance: Balance(amount: Decimal(string: "128.40")!, currency: .cny),
+                    fetchedAt: now.addingTimeInterval(-120),
+                    isAvailable: true
+                )
             ),
             status: .fresh
         ),
         BalanceRow(
             account: staleAccount,
-            snapshot: BalanceSnapshot(
-                accountID: staleAccount.id,
-                balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
-                fetchedAt: now.addingTimeInterval(-1_200),
-                isAvailable: true
+            snapshot: .balance(
+                BalanceSnapshot(
+                    accountID: staleAccount.id,
+                    balance: Balance(amount: Decimal(string: "42.50")!, currency: .cny),
+                    fetchedAt: now.addingTimeInterval(-1_200),
+                    isAvailable: true
+                )
             ),
             status: .stale
         ),
@@ -305,7 +309,7 @@ private struct BalanceRowDetailView: View {
             BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100")!),
         ]
     )
-    let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+    let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
     BalanceRowView(
         viewState: BalanceRowPresentation.viewState(for: row, now: now),
         detail: BalanceRowPresentation.detailViewState(for: row),

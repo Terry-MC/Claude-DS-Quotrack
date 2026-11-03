@@ -12,7 +12,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now.addingTimeInterval(-300),
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -33,7 +33,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now.addingTimeInterval(-900),
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .stale)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .stale)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -56,7 +56,7 @@ struct BalanceRowPresentationTests {
                 BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100")!),
             ]
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -78,7 +78,7 @@ struct BalanceRowPresentationTests {
                 BalanceBreakdownItem(kind: .spend, amount: Decimal(string: "25.75")!),
             ]
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -95,7 +95,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let rowState = BalanceRowPresentation.viewState(for: row, now: now)
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
@@ -114,7 +114,7 @@ struct BalanceRowPresentationTests {
             fetchedAt: fetchedAt,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let detail = BalanceRowPresentation.detailViewState(for: row, timeZone: utc)
 
@@ -163,7 +163,7 @@ struct BalanceRowPresentationTests {
         )
         let row = BalanceRow(
             account: account,
-            snapshot: snapshot,
+            snapshot: .balance(snapshot),
             status: .error,
             error: .network
         )

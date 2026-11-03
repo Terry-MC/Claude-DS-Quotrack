@@ -27,7 +27,9 @@ struct MockModeTests {
         await monitor.refresh()
 
         let errorRows = monitor.rows.filter { $0.status == .error }
-        #expect(Set(errorRows.compactMap(\.error)) == Set(BalanceProviderError.allCases))
+        let expectedErrors = Set(BalanceProviderError.allCases)
+            .subtracting([.unsupportedAccountKind])
+        #expect(Set(errorRows.compactMap(\.error)) == expectedErrors)
         #expect(errorRows.allSatisfy { $0.snapshot == nil })
     }
 
@@ -125,7 +127,7 @@ struct MockModeTests {
             monitor.rows.first { $0.account.label == "工作账户" }
         )
         #expect(
-            lowBalanceRow.snapshot?.balance
+            lowBalanceRow.balanceSnapshot?.balance
                 == Balance(amount: Decimal(string: "0.80")!, currency: .cny)
         )
         #expect(lowBalanceRow.status == .fresh)
@@ -147,16 +149,16 @@ struct MockModeTests {
         let personalRow = try #require(
             monitor.rows.first { $0.account.label == "个人账户" }
         )
-        #expect(personalRow.snapshot?.breakdown == [
+        #expect(personalRow.balanceSnapshot?.breakdown == [
             BalanceBreakdownItem(kind: .granted, amount: Decimal(string: "28.40")!),
             BalanceBreakdownItem(kind: .toppedUp, amount: Decimal(string: "100.00")!),
         ])
         let detail = BalanceRowPresentation.detailViewState(for: personalRow)
         #expect(detail.breakdown.map(\.label) == ["赠送余额", "充值余额"])
 
-        let balancedRows = monitor.rows.filter { $0.snapshot != nil }
-        #expect(balancedRows.contains { $0.snapshot?.breakdown == nil })
-        #expect(balancedRows.filter { $0.snapshot?.breakdown != nil }.count >= 4)
+        let balancedRows = monitor.rows.filter { $0.balanceSnapshot != nil }
+        #expect(balancedRows.contains { $0.balanceSnapshot?.breakdown == nil })
+        #expect(balancedRows.filter { $0.balanceSnapshot?.breakdown != nil }.count >= 4)
     }
 
     @Test

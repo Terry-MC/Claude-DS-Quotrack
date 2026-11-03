@@ -19,9 +19,9 @@ struct AdapterWiringTests {
             now: { wiring.now }
         )
 
-        let snapshot = try await registry.fetchBalance(for: wiring.account)
+        let snapshot = try await registry.fetchSnapshot(for: wiring.account)
 
-        #expect(snapshot.balance == wiring.expectedBalance)
+        #expect(snapshot.balanceSnapshot?.balance == wiring.expectedBalance)
         let request = try #require(transport.requests.first)
         #expect(transport.requests.count == 1)
         #expect(request.url == wiring.expectedEndpoint)
@@ -57,7 +57,7 @@ struct AdapterWiringTests {
         await monitor.refresh()
 
         #expect(
-            monitor.rows.first?.snapshot?.balance
+            monitor.rows.first?.balanceSnapshot?.balance
                 == wiring.expectedBalance
         )
         #expect(transport.requests.first?.url == wiring.expectedEndpoint)
@@ -85,7 +85,7 @@ struct AdapterWiringTests {
             )
         )
 
-        #expect(snapshot.balance == wiring.expectedBalance)
+        #expect(snapshot.balanceSnapshot?.balance == wiring.expectedBalance)
         #expect(snapshot.isAvailable)
         let request = try #require(transport.requests.first)
         #expect(request.url == wiring.expectedEndpoint)
@@ -100,8 +100,8 @@ struct AdapterWiringTests {
         let registry = ProviderRegistry(adapters: [:])
         let account = Account(id: UUID(), provider: .moonshot, label: "Kimi")
 
-        await #expect(throws: BalanceProviderError.unknown) {
-            try await registry.fetchBalance(for: account)
+        await #expect(throws: BalanceProviderError.unsupportedAccountKind) {
+            try await registry.fetchSnapshot(for: account)
         }
     }
 }

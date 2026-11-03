@@ -17,7 +17,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -46,7 +46,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -68,7 +68,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now.addingTimeInterval(-3_600),
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .stale)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .stale)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -90,7 +90,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .error, error: .network)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .error, error: .network)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -112,7 +112,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now,
             isAvailable: false
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .unavailable)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .unavailable)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 
@@ -147,7 +147,7 @@ struct LowBalancePresentationTests {
             fetchedAt: now,
             isAvailable: true
         )
-        let row = BalanceRow(account: account, snapshot: snapshot, status: .fresh)
+        let row = BalanceRow(account: account, snapshot: .balance(snapshot), status: .fresh)
 
         let viewState = BalanceRowPresentation.viewState(for: row, now: now)
 

@@ -1,37 +1,50 @@
 import Foundation
 
-/// Routes a Balance query to the adapter registered for the Account's
-/// Provider. Real adapters and the mock adapter are both registered here, so
-/// switching the data source never changes the monitor or the UI.
-struct ProviderRegistry: BalanceProvider {
-    private let adapters: [Provider: any BalanceProvider]
+/// Identifies one Provider adapter. A Provider can expose more than one
+/// Account Kind, so the kind is part of the routing key.
+struct ProviderAdapterKey: Hashable, Sendable {
+    let provider: Provider
+    let kind: AccountKind
+}
 
-    init(adapters: [Provider: any BalanceProvider]) {
+/// Routes a snapshot query to the adapter registered for the Account's
+/// Provider and kind. Real adapters and the mock adapter are both registered
+/// here, so switching the data source never changes the monitor or the UI.
+struct ProviderRegistry: AccountProvider {
+    private let adapters: [ProviderAdapterKey: any AccountProvider]
+
+    init(adapters: [ProviderAdapterKey: any AccountProvider]) {
         self.adapters = adapters
     }
 
-    func fetchBalance(for account: Account) async throws -> BalanceSnapshot {
-        guard let adapter = adapters[account.provider] else {
-            throw BalanceProviderError.unknown
+    func fetchSnapshot(for account: Account) async throws -> AccountSnapshot {
+        let key = ProviderAdapterKey(provider: account.provider, kind: account.kind)
+        guard let adapter = adapters[key] else {
+            throw BalanceProviderError.unsupportedAccountKind
         }
-        return try await adapter.fetchBalance(for: account)
+        return try await adapter.fetchSnapshot(for: account)
     }
 }
 
 extension ProviderRegistry {
     /// The production registry. Providers whose adapters are not implemented
-    /// yet are absent, so the registry fails them with an unknown error rather
-    /// than showing a fabricated Balance.
+    /// yet are absent, so the registry fails them with a typed error rather
+    /// than showing fabricated data.
     static func live(
         credentialStore: any CredentialStore,
         transport: any HTTPTransport = URLSessionTransport(),
         now: @escaping @Sendable () -> Date = { Date() }
     ) -> ProviderRegistry {
-        let adapters = LiveBalanceAdapters.make(
+        let balanceAdapters = LiveBalanceAdapters.make(
             credentialStore: credentialStore,
             transport: transport,
             now: now
         )
-        return ProviderRegistry(adapters: adapters.mapValues { $0 as any BalanceProvider })
+        var adapters: [ProviderAdapterKey: any AccountProvider] = [:]
+        for (provider, adapter) in balanceAdapters {
+            adapters[ProviderAdapterKey(provider: provider, kind: .balance)] =
+                BalanceProviderAdapter(provider: adapter)
+        }
+        return ProviderRegistry(adapters: adapters)
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// this value while the monitor, UI, and refresh behavior stay real.
 struct BalanceDataSource: Sendable {
     let accounts: [Account]
-    let provider: any BalanceProvider
+    let provider: any AccountProvider
 }
 
 extension BalanceDataSource {
@@ -36,15 +36,16 @@ extension BalanceDataSource {
     /// adapter, and the Accounts come from the same fixture set.
     static func mock(now: Date) -> BalanceDataSource {
         let fixtures = MockFixtures.standard(now: now)
-        let mockProvider = MockBalanceProvider(fixtures: fixtures)
-        let registry = ProviderRegistry(
-            adapters: Dictionary(
-                uniqueKeysWithValues: Provider.allCases.map { ($0, mockProvider) }
-            )
+        let mockProvider = BalanceProviderAdapter(
+            provider: MockBalanceProvider(fixtures: fixtures)
         )
+        var adapters: [ProviderAdapterKey: any AccountProvider] = [:]
+        for provider in Provider.allCases {
+            adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
+        }
         return BalanceDataSource(
             accounts: fixtures.map(\.account),
-            provider: registry
+            provider: ProviderRegistry(adapters: adapters)
         )
     }
 }

@@ -138,7 +138,7 @@ struct DeepSeekAdapterTests {
         let row = try #require(monitor.rows.first)
         #expect(row.snapshot?.isAvailable == false)
         #expect(
-            row.snapshot?.balance
+            row.balanceSnapshot?.balance
                 == Balance(amount: Decimal(string: "0.00")!, currency: .usd)
         )
         #expect(row.status == .unavailable)

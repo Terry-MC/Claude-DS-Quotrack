@@ -5,14 +5,22 @@ import Foundation
 final class InMemorySnapshotStore: SnapshotStore, @unchecked Sendable {
     private let lock = NSLock()
     private var accounts: [Account]
-    private var snapshots: [Account.ID: BalanceSnapshot]
+    private var snapshots: [Account.ID: AccountSnapshot]
 
     init(
         accounts: [Account] = [],
         snapshots: [Account.ID: BalanceSnapshot] = [:]
     ) {
         self.accounts = accounts
-        self.snapshots = snapshots
+        self.snapshots = snapshots.mapValues(AccountSnapshot.balance)
+    }
+
+    init(
+        accounts: [Account] = [],
+        accountSnapshots: [Account.ID: AccountSnapshot]
+    ) {
+        self.accounts = accounts
+        self.snapshots = accountSnapshots
     }
 
     func loadAccounts() -> [Account] {
@@ -23,11 +31,11 @@ final class InMemorySnapshotStore: SnapshotStore, @unchecked Sendable {
         lock.withLock { self.accounts = accounts }
     }
 
-    func loadSnapshots() -> [Account.ID: BalanceSnapshot] {
+    func loadSnapshots() -> [Account.ID: AccountSnapshot] {
         lock.withLock { snapshots }
     }
 
-    func saveSnapshot(_ snapshot: BalanceSnapshot) throws {
+    func saveSnapshot(_ snapshot: AccountSnapshot) throws {
         lock.withLock { snapshots[snapshot.accountID] = snapshot }
     }
 

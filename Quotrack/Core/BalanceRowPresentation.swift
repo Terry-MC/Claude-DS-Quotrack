@@ -62,7 +62,7 @@ enum BalanceRowPresentation {
             id: row.id,
             providerName: row.account.provider.displayName,
             label: row.account.label,
-            balanceText: row.snapshot.map(balanceText(for:)) ?? placeholder,
+            balanceText: row.balanceSnapshot.map(balanceText(for:)) ?? placeholder,
             updatedText: row.snapshot.map { relativeText(for: $0.fetchedAt, now: now) } ?? placeholder,
             statusText: row.status.map(statusText(for:)) ?? placeholder,
             status: row.status,
@@ -95,7 +95,7 @@ enum BalanceRowPresentation {
         case .fresh:
             guard
                 let threshold = row.account.lowBalanceThreshold,
-                let amount = row.snapshot?.balance.amount,
+                let amount = row.balanceSnapshot?.balance.amount,
                 amount < threshold
             else {
                 return .normal
@@ -108,7 +108,7 @@ enum BalanceRowPresentation {
         for row: BalanceRow,
         timeZone: TimeZone = .current
     ) -> BalanceRowDetailViewState {
-        let snapshot = row.snapshot
+        let snapshot = row.balanceSnapshot
         return BalanceRowDetailViewState(
             accountID: row.id,
             balanceText: snapshot.map(preciseBalanceText(for:)),

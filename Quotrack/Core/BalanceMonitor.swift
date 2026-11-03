@@ -4,13 +4,13 @@ import Observation
 /// One Account's row state as the panel observes it.
 struct BalanceRow: Identifiable, Equatable, Sendable {
     let account: Account
-    let snapshot: BalanceSnapshot?
+    let snapshot: AccountSnapshot?
     let status: SnapshotStatus?
     let error: BalanceProviderError?
 
     init(
         account: Account,
-        snapshot: BalanceSnapshot?,
+        snapshot: AccountSnapshot?,
         status: SnapshotStatus?,
         error: BalanceProviderError? = nil
     ) {
@@ -21,6 +21,16 @@ struct BalanceRow: Identifiable, Equatable, Sendable {
     }
 
     var id: Account.ID { account.id }
+
+    /// The v1 Balance view of this row. Quota rows return nil until their own
+    /// presentation arrives.
+    var balanceSnapshot: BalanceSnapshot? {
+        snapshot?.balanceSnapshot
+    }
+
+    var quotaSnapshot: QuotaSnapshot? {
+        snapshot?.quotaSnapshot
+    }
 }
 
 /// The single observable seam the UI depends on. Polling, backoff, staleness,
@@ -76,7 +86,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         var nextAutomaticAttemptAt: Date
     }
 
-    private var provider: any BalanceProvider
+    private var provider: any AccountProvider
     private var accounts: [Account]
     private var configuredPollingInterval: TimeInterval
     private let clock: any PollingClock
@@ -123,7 +133,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     }
 
     init(
-        provider: any BalanceProvider,
+        provider: any AccountProvider,
         accounts: [Account],
         store: (any SnapshotStore)? = nil,
         pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
@@ -146,6 +156,28 @@ final class LiveBalanceMonitor: BalanceMonitor {
         )
         self.rows = []
         self.rows = initialRows(for: accounts, store: store)
+    }
+
+    /// v1 compatibility for tests and callers that still supply a Balance-only
+    /// adapter. New code should supply an `AccountProvider`.
+    convenience init(
+        provider: any BalanceProvider,
+        accounts: [Account],
+        store: (any SnapshotStore)? = nil,
+        pollingInterval: TimeInterval = LiveBalanceMonitor.defaultPollingInterval,
+        clock: any PollingClock = SystemPollingClock(),
+        now: (@Sendable () -> Date)? = nil,
+        sleepWakeObserver: any SleepWakeObserving = NoopSleepWakeObserver()
+    ) {
+        self.init(
+            provider: BalanceProviderAdapter(provider: provider),
+            accounts: accounts,
+            store: store,
+            pollingInterval: pollingInterval,
+            clock: clock,
+            now: now,
+            sleepWakeObserver: sleepWakeObserver
+        )
     }
 
     convenience init(
@@ -359,7 +391,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
     private nonisolated static func fetch(
         _ account: Account,
-        using provider: any BalanceProvider,
+        using provider: any AccountProvider,
         limiter: FetchLimiter
     ) async -> FetchResult {
         do {
@@ -375,7 +407,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
         let outcome: FetchOutcome
         do {
-            let snapshot = try await provider.fetchBalance(for: account)
+            let snapshot = try await provider.fetchSnapshot(for: account)
             outcome = .snapshot(snapshot)
         } catch {
             outcome = Task.isCancelled
@@ -424,7 +456,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
         return backoffDelays[index]
     }
 
-    private func apply(_ snapshot: BalanceSnapshot) {
+    private func apply(_ snapshot: AccountSnapshot) {
         guard let index = rows.firstIndex(where: { $0.account.id == snapshot.accountID }) else {
             return
         }
@@ -479,7 +511,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
     /// no current error, a Snapshot older than three Polling Intervals is
     /// Stale and keeps its last known Balance visible.
     private func status(
-        for snapshot: BalanceSnapshot?,
+        for snapshot: AccountSnapshot?,
         error: BalanceProviderError?,
         at now: Date
     ) -> SnapshotStatus? {
@@ -502,7 +534,7 @@ final class LiveBalanceMonitor: BalanceMonitor {
 
 /// What one Provider fetch produced, independent of which Account's task ran.
 private enum FetchOutcome: Sendable {
-    case snapshot(BalanceSnapshot)
+    case snapshot(AccountSnapshot)
     case failure(BalanceProviderError)
     case cancelled
 }

@@ -26,6 +26,7 @@ enum UIStrings {
     static let networkError = "网络错误，请检查网络连接。"
     static let rateLimitError = "请求过于频繁，请稍后重试。"
     static let malformedResponseError = "响应格式异常，无法解析。"
+    static let unsupportedAccountKindError = "该账户类型暂不支持。"
     static let unknownError = "未知错误，请稍后重试。"
 
     // Expanded row

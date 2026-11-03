@@ -65,7 +65,12 @@ struct MonitorSeamTests {
                 isAvailable: true
             )
         }
-        return BalanceRow(account: account, snapshot: snapshot, status: status, error: error)
+        return BalanceRow(
+            account: account,
+            snapshot: snapshot.map(AccountSnapshot.balance),
+            status: status,
+            error: error
+        )
     }
 }
 

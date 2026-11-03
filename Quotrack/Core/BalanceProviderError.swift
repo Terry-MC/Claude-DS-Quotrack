@@ -11,6 +11,7 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
         case network
         case rateLimit
         case malformedResponse
+        case unsupportedAccountKind
         case unknown
     }
 
@@ -29,6 +30,7 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
     static let network = Self(.network)
     static let rateLimit = Self(.rateLimit)
     static let malformedResponse = Self(.malformedResponse)
+    static let unsupportedAccountKind = Self(.unsupportedAccountKind)
     static let unknown = Self(.unknown)
 
     /// A rate-limit failure. The delay comes from `Retry-After` when the
@@ -71,6 +73,8 @@ struct BalanceProviderError: Error, Hashable, Sendable, CaseIterable {
             UIStrings.rateLimitError
         case .malformedResponse:
             UIStrings.malformedResponseError
+        case .unsupportedAccountKind:
+            UIStrings.unsupportedAccountKindError
         case .unknown:
             UIStrings.unknownError
         }

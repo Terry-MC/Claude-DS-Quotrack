@@ -15,7 +15,7 @@ struct StalenessTests {
 
         let pastBoundary = try makeRow(age: 3 * interval + 1, interval: interval)
         #expect(pastBoundary.status == .stale)
-        #expect(pastBoundary.snapshot?.balance == lastKnownBalance)
+        #expect(pastBoundary.balanceSnapshot?.balance == lastKnownBalance)
     }
 
     @Test
