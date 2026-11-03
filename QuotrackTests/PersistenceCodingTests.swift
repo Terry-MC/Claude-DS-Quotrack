@@ -25,6 +25,51 @@ struct PersistenceCodingTests {
     }
 
     @Test
+    func legacyAccountJSONMigratesToBalanceKindAndWarningThreshold() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuotrackAccountMigration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let accountID = UUID()
+        let legacyJSON = """
+        [{"id":"\(accountID.uuidString)","provider":"deepSeek","label":"个人账户","lowBalanceThreshold":10.5}]
+        """
+        try Data(legacyJSON.utf8).write(
+            to: directory.appendingPathComponent("accounts.json")
+        )
+
+        let accounts = FileSnapshotStore(directoryURL: directory).loadAccounts()
+
+        let account = try #require(accounts.first)
+        #expect(account.id == accountID)
+        #expect(account.kind == .balance)
+        #expect(account.warningThreshold == Decimal(string: "10.5"))
+        #expect(account.criticalThreshold == nil)
+        #expect(account.lowBalanceThreshold == Decimal(string: "10.5"))
+    }
+
+    @Test
+    func accountKindAndThresholdsRoundTripThroughJSON() throws {
+        let account = Account(
+            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+            provider: .moonshot,
+            region: .domestic,
+            kind: .subscription,
+            label: "Kimi Code",
+            warningThreshold: 20,
+            criticalThreshold: 10
+        )
+
+        let data = try JSONEncoder().encode([account])
+        let decoded = try JSONDecoder().decode([Account].self, from: data)
+
+        #expect(decoded == [account])
+        #expect(decoded.first?.kind == .subscription)
+        #expect(decoded.first?.warningThreshold == 20)
+        #expect(decoded.first?.criticalThreshold == 10)
+    }
+
+    @Test
     func balanceSnapshotBreakdownRoundTripsThroughJSON() throws {
         let snapshot = BalanceSnapshot(
             accountID: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,

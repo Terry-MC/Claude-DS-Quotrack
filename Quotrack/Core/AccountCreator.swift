@@ -13,21 +13,33 @@ struct AccountCreator {
         self.connectionTester = connectionTester
     }
 
-    /// Runs the connection test before any Keychain or metadata write. The
-    /// optional threshold is applied after the Account exists.
+    /// Runs the connection test before any Keychain or metadata write. Both
+    /// thresholds are applied after the Account exists.
+    func create(
+        _ draft: AccountDraft,
+        thresholds: AccountThresholds
+    ) async throws -> Account {
+        _ = try await connectionTester.testConnection(draft)
+        let account = try manager.addAccount(draft)
+        guard thresholds.warning != nil || thresholds.critical != nil else {
+            return account
+        }
+        try manager.updateThresholds(
+            accountID: account.id,
+            thresholds: thresholds
+        )
+        return account.with(thresholds: thresholds)
+    }
+
+    /// v1 compatibility wrapper until the Balance health UI migrates to
+    /// `AccountThresholds`.
     func create(
         _ draft: AccountDraft,
         lowBalanceThreshold: Decimal? = nil
     ) async throws -> Account {
-        _ = try await connectionTester.testConnection(draft)
-        let account = try manager.addAccount(draft)
-        guard let lowBalanceThreshold else {
-            return account
-        }
-        try manager.updateLowBalanceThreshold(
-            accountID: account.id,
-            threshold: lowBalanceThreshold
+        try await create(
+            draft,
+            thresholds: AccountThresholds(warning: lowBalanceThreshold)
         )
-        return account.with(lowBalanceThreshold: lowBalanceThreshold)
     }
 }

@@ -59,6 +59,32 @@ struct AccountCreatorTests {
     }
 
     @Test
+    func aSuccessfulConnectionTestSavesBothThresholds() async throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let tester = RecordingConnectionTester(result: .success(makeSnapshot()))
+        let creator = AccountCreator(manager: manager, connectionTester: tester)
+        let draft = AccountDraft(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+        let thresholds = AccountThresholds(
+            warning: Decimal(string: "50"),
+            critical: Decimal(string: "20")
+        )
+
+        let account = try await creator.create(draft, thresholds: thresholds)
+
+        #expect(account.warningThreshold == Decimal(string: "50"))
+        #expect(account.criticalThreshold == Decimal(string: "20"))
+        #expect(manager.accounts == [account])
+        #expect(store.loadAccounts() == [account])
+        #expect(tester.requests.map(\.draft) == [draft])
+    }
+
+    @Test
     func openRouterWarnsAboutTheManagementKeyBeforeSave() {
         #expect(
             AccountFormPresentation.credentialWarning(for: .openRouter)

@@ -30,6 +30,7 @@ final class AccountManager {
             id: UUID(),
             provider: draft.provider,
             region: draft.normalizedRegion,
+            kind: draft.kind,
             label: trimmedLabel
         )
         try credentialStore.save(draft.credential, for: account.id)
@@ -51,6 +52,37 @@ final class AccountManager {
         }
         let trimmedLabel = try validatedLabel(label)
         try replaceAccount(at: index, with: accounts[index].with(label: trimmedLabel))
+    }
+
+    /// Replaces both health thresholds on an Account while preserving its
+    /// identity, Provider, Region, label, and credential.
+    func updateThresholds(
+        accountID: Account.ID,
+        thresholds: AccountThresholds
+    ) throws {
+        guard let index = accounts.firstIndex(where: { $0.id == accountID }) else {
+            throw AccountManagerError.accountNotFound
+        }
+        try Self.validate(thresholds)
+        try replaceAccount(
+            at: index,
+            with: accounts[index].with(thresholds: thresholds)
+        )
+    }
+
+    /// Thresholds are optional, but any value that is present must be positive
+    /// and the critical line must be below the warning line.
+    private static func validate(_ thresholds: AccountThresholds) throws {
+        for value in [thresholds.warning, thresholds.critical].compactMap({ $0 }) {
+            guard value > 0 else {
+                throw AccountManagerError.invalidThreshold
+            }
+        }
+        if let warning = thresholds.warning,
+           let critical = thresholds.critical,
+           critical >= warning {
+            throw AccountManagerError.invalidThreshold
+        }
     }
 
     /// Enables or clears the Account's low-Balance warning. A threshold must
@@ -123,7 +155,7 @@ enum AccountManagerError: Error, Equatable, LocalizedError {
         case .accountNotFound: "账户不存在。"
         case .missingLabel: "请填写账户标签。"
         case .missingCredential: "请填写凭证。"
-        case .invalidThreshold: "低余额阈值必须大于 0。"
+        case .invalidThreshold: "阈值必须大于 0，且紧急线必须低于预警线。"
         }
     }
 }

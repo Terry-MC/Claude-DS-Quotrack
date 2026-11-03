@@ -24,6 +24,43 @@ struct AccountManagerTests {
     }
 
     @Test
+    func newAccountsDefaultToBalanceKind() throws {
+        let manager = AccountManager(
+            store: InMemorySnapshotStore(),
+            credentialStore: InMemoryCredentialStore()
+        )
+
+        let account = try manager.addAccount(
+            provider: .deepSeek,
+            label: "个人账户",
+            credential: "sk-deepseek"
+        )
+
+        #expect(account.kind == .balance)
+        #expect(manager.accounts.first?.kind == .balance)
+    }
+
+    @Test
+    func addingASubscriptionAccountKeepsItsKind() throws {
+        let store = InMemorySnapshotStore()
+        let manager = AccountManager(
+            store: store,
+            credentialStore: InMemoryCredentialStore()
+        )
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-kimi",
+            kind: .subscription
+        )
+
+        let account = try manager.addAccount(draft)
+
+        #expect(account.kind == .subscription)
+        #expect(store.loadAccounts() == [account])
+    }
+
+    @Test
     func addingAnAccountStoresTheCredentialOnlyInTheCredentialStore() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
