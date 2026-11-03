@@ -72,6 +72,11 @@ struct AuthenticatedHTTPClient: Sendable {
             return stored
         } catch let error as BalanceProviderError {
             throw error
+        } catch let error as CredentialStoreError {
+            throw BalanceProviderError(
+                .authentication,
+                detail: error.localizedDescription
+            )
         } catch {
             throw BalanceProviderError.classify(error)
         }

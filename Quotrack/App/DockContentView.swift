@@ -2,98 +2,76 @@ import SwiftUI
 
 /// The dock's visual content. It renders a pure `DockPresentation`, so every
 /// state can be previewed without a monitor, a window, or polling.
+///
+/// The dock is deliberately quiet: a slim glass tab with one status-colored
+/// edge bar, a dot, and a count. The tint never floods the whole surface.
 @MainActor
 struct DockContentView: View {
     let presentation: DockPresentation
-    var onOpen: () -> Void = {}
 
     @State private var pulseExpanded = false
 
     var body: some View {
-        Button(action: onOpen) {
-            VStack(spacing: 10) {
-                mark
-                statusDot
-                if let badgeText = presentation.badgeText {
-                    badge(text: badgeText)
+        HStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 1, style: .continuous)
+                .fill(tint.opacity(accentOpacity))
+                .frame(width: 2)
+                .padding(.vertical, 12)
+                .padding(.leading, 4)
+
+            VStack(spacing: 8) {
+                Text("Q")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(UITheme.textSecondary)
+
+                Circle()
+                    .fill(tint)
+                    .frame(width: 5, height: 5)
+                    .shadow(color: tint.opacity(dotGlow), radius: 4)
+
+                ZStack {
+                    if let badgeText = presentation.badgeText {
+                        Text(badgeText)
+                            .font(
+                                .system(size: 9, weight: .medium)
+                                    .monospacedDigit()
+                            )
+                            .foregroundStyle(badgeColor)
+                    }
                 }
+                .frame(height: 10)
             }
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(background)
-            .contentShape(dockShape)
+            .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.plain)
-        .help(UIStrings.dockOpenPanelHint)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(presentation.accessibilityDescription)
-        .accessibilityHint(UIStrings.dockOpenPanelHint)
-        .accessibilityAddTraits(.isButton)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(background)
+        .accessibilityHidden(true)
         .onAppear(perform: updatePulse)
         .onChange(of: presentation.isPulsing) {
             updatePulse()
         }
+        .preferredColorScheme(.dark)
     }
 
     private var dockShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
-            topLeadingRadius: 16,
-            bottomLeadingRadius: 16,
+            topLeadingRadius: 14,
+            bottomLeadingRadius: 14,
             bottomTrailingRadius: 0,
             topTrailingRadius: 0,
             style: .continuous
         )
     }
 
-    private var mark: some View {
-        Image(systemName: "chart.bar.fill")
-            .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(presentation.status == .normal ? Color.secondary : tint)
-            .frame(width: 34, height: 34)
-            .background(
-                tint.opacity(presentation.status == .normal ? 0.10 : 0.16),
-                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-            )
-            .accessibilityHidden(true)
-    }
-
-    /// A ring expands away from the dot only in the critical state. Reduce
-    /// Motion turns the ring off entirely; the dot stays solid and visible.
-    private var statusDot: some View {
-        ZStack {
-            if presentation.isPulsing {
-                Circle()
-                    .stroke(tint.opacity(0.55), lineWidth: 2)
-                    .frame(width: 10, height: 10)
-                    .scaleEffect(pulseExpanded ? 2.0 : 1.0)
-                    .opacity(pulseExpanded ? 0 : 0.85)
-            }
-            Circle()
-                .fill(tint)
-                .frame(width: 10, height: 10)
-        }
-        .frame(width: 24, height: 24)
-        .accessibilityHidden(true)
-    }
-
-    private func badge(text: String) -> some View {
-        Text(text)
-            .font(.system(size: 10, weight: .bold).monospacedDigit())
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .frame(minWidth: 20)
-            .padding(.vertical, 2)
-            .background(tint, in: Capsule())
-            .accessibilityHidden(true)
-    }
-
     private var background: some View {
         dockShape
-            .fill(.regularMaterial)
+            .fill(.ultraThinMaterial)
+            .overlay(dockShape.fill(UITheme.panelTint))
             .overlay(dockShape.fill(tint.opacity(tintOpacity)))
             .overlay(
                 dockShape.strokeBorder(
-                    tint.opacity(borderOpacity),
+                    borderColor,
                     lineWidth: 1
                 )
             )
@@ -101,26 +79,45 @@ struct DockContentView: View {
 
     private var tint: Color {
         switch presentation.status {
-        case .normal: .green
-        case .warning: .orange
-        case .critical: .red
+        case .normal: UITheme.green
+        case .warning: UITheme.yellow
+        case .critical: UITheme.red
+        }
+    }
+
+    private var badgeColor: Color {
+        switch presentation.status {
+        case .normal: UITheme.textTertiary
+        case .warning: UITheme.yellow
+        case .critical: UITheme.red
         }
     }
 
     private var tintOpacity: Double {
         switch presentation.status {
-        case .normal: 0.04
-        case .warning: 0.12
-        case .critical: 0.15
+        case .normal: 0
+        case .warning: 0.03
+        case .critical: 0.05
         }
     }
 
-    private var borderOpacity: Double {
+    private var borderColor: Color {
         switch presentation.status {
-        case .normal: 0.18
-        case .warning: 0.45
-        case .critical: 0.55
+        case .normal: Color.white.opacity(0.10)
+        case .warning: UITheme.yellow.opacity(0.28)
+        case .critical: UITheme.red.opacity(0.32)
         }
+    }
+
+    private var accentOpacity: Double {
+        guard presentation.isPulsing else {
+            return presentation.status == .normal ? 0.55 : 0.8
+        }
+        return pulseExpanded ? 0.30 : 0.95
+    }
+
+    private var dotGlow: Double {
+        presentation.isPulsing && pulseExpanded ? 0.35 : 0.65
     }
 
     private func updatePulse() {
@@ -129,7 +126,7 @@ struct DockContentView: View {
             return
         }
         pulseExpanded = false
-        withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
+        withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
             pulseExpanded = true
         }
     }
@@ -145,9 +142,9 @@ private func previewDock(_ presentation: DockPresentation) -> some View {
         .padding(48)
         .background(
             LinearGradient(
-                colors: [.gray.opacity(0.28), .gray.opacity(0.08)],
-                startPoint: .top,
-                endPoint: .bottom
+                colors: [.black, Color(rgb: 0x1B1D27)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
         )
 }

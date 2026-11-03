@@ -70,6 +70,43 @@ struct KimiCodeAdapterTests {
     }
 
     @Test
+    func decodesTheNewWeeklyRatioPoolWithMonthlyAndFiveHourWindows() async throws {
+        let snapshot = try await fetch(KimiCodeFixtures.ratioPools)
+        let quota = try #require(snapshot.quotaSnapshot)
+
+        #expect(quota.limit == 100)
+        #expect(quota.remaining == Decimal(string: "91.56"))
+        #expect(quota.used == Decimal(string: "8.44"))
+        #expect(quota.resetAt == Self.date("2026-02-11T17:32:50.757941Z"))
+
+        let windows = try #require(quota.windows)
+        #expect(windows.map(\.name) == ["5 小时窗口", "本月用量"])
+        #expect(windows[0].remaining == 100)
+        #expect(windows[1].remaining == 80)
+    }
+
+    @Test
+    func fallsBackToTheMonthlyRatioWhenWeeklyIsMissing() async throws {
+        let snapshot = try await fetch(KimiCodeFixtures.ratioPoolsWithoutWeekly)
+        let quota = try #require(snapshot.quotaSnapshot)
+
+        // 8.44 is treated as an already-percentage used_ratio.
+        #expect(quota.remaining == Decimal(string: "91.56"))
+        #expect(quota.used == Decimal(string: "8.44"))
+        #expect(quota.windows?.map(\.name) == ["5 小时窗口"])
+    }
+
+    @Test
+    func decodesRatioPoolsInsideTheDataEnvelope() async throws {
+        let snapshot = try await fetch(KimiCodeFixtures.ratioPoolsEnvelope)
+        let quota = try #require(snapshot.quotaSnapshot)
+
+        #expect(quota.remaining == Decimal(string: "91.56"))
+        #expect(quota.windows == nil)
+        #expect(quota.resetAt == Self.date("2026-02-11T17:32:50.757941Z"))
+    }
+
+    @Test
     func fallsBackToTheFirstLimitWhenWeeklyUsageIsMissing() async throws {
         let snapshot = try await fetch(KimiCodeFixtures.weeklyMissing)
         let quota = try #require(snapshot.quotaSnapshot)

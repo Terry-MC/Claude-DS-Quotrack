@@ -31,6 +31,49 @@ struct AccountCreatorTests {
     }
 
     @Test
+    func kimiCodeSubscriptionRejectsAnOpenPlatformKeyBeforeTheNetwork() async throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let tester = RecordingConnectionTester(balanceResult: .success(makeSnapshot()))
+        let creator = AccountCreator(manager: manager, connectionTester: tester)
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi Code",
+            credential: "sk-open-platform-key",
+            kind: .subscription
+        )
+
+        await #expect(throws: AccountManagerError.kimiCodeCredentialRequired) {
+            try await creator.create(draft)
+        }
+
+        #expect(tester.requests.isEmpty)
+        #expect(manager.accounts.isEmpty)
+        #expect(credentials.saveCallCount == 0)
+    }
+
+    @Test
+    func credentialsAreTrimmedForTestingAndStorage() async throws {
+        let store = InMemorySnapshotStore()
+        let credentials = InMemoryCredentialStore()
+        let manager = AccountManager(store: store, credentialStore: credentials)
+        let tester = RecordingConnectionTester(balanceResult: .success(makeSnapshot()))
+        let creator = AccountCreator(manager: manager, connectionTester: tester)
+        let draft = AccountDraft(
+            provider: .moonshot,
+            label: "Kimi 主账号",
+            credential: "  sk-pasted-key\n"
+        )
+
+        let account = try await creator.create(draft)
+
+        #expect(tester.requests.first?.draft.credential == "sk-pasted-key")
+        let stored = try credentials.credential(for: account.id)
+        #expect(stored == "sk-pasted-key")
+    }
+
+    @Test
     func invalidThresholdsAreRejectedBeforeTheConnectionTestOrSave() async throws {
         let store = InMemorySnapshotStore()
         let credentials = InMemoryCredentialStore()

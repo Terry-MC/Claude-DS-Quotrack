@@ -15,7 +15,7 @@ final class SettingsWindowController {
         makeConnectionTester: @escaping @MainActor () -> any ConnectionTesting,
         onAccountsChanged: @escaping () -> Void = {}
     ) {
-        let contentSize = NSSize(width: 560, height: 620)
+        let contentSize = NSSize(width: 600, height: 700)
         let window = NSWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
@@ -24,7 +24,11 @@ final class SettingsWindowController {
         )
         window.title = "Quotrack 设置"
         window.isReleasedWhenClosed = false
-        window.contentMinSize = NSSize(width: 520, height: 520)
+        window.contentMinSize = NSSize(width: 560, height: 620)
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.backgroundColor = NSColor(
+            red: 0.055, green: 0.059, blue: 0.082, alpha: 1
+        )
         window.contentView = NSHostingView(
             rootView: SettingsView(
                 manager: manager,

@@ -222,7 +222,7 @@ enum BalanceRowPresentation {
 
     private static func percentText(_ value: Decimal) -> String {
         value.formatted(
-            .number.precision(.fractionLength(0...1)).locale(amountLocale)
+            .number.precision(.fractionLength(0...2)).locale(amountLocale)
         ) + "%"
     }
 

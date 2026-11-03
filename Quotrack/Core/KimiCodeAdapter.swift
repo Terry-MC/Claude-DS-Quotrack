@@ -67,44 +67,14 @@ struct KimiCodeAdapter: AccountProvider, CredentialAccountAdapter {
     ) throws -> QuotaSnapshot {
         do {
             let decoded = try Self.decodeUsage(from: response.body)
-            guard let normalized = decoded.normalized else {
-                throw BalanceProviderError.malformedResponse
-            }
-
-            let primary = normalized.primary
-            guard let limit = primary.limit?.value,
-                  limit > 0,
-                  let remaining = primary.remaining?.value else {
-                throw BalanceProviderError.malformedResponse
-            }
-
-            let windows = normalized.secondaries.enumerated().compactMap {
-                index,
-                secondary -> QuotaWindow? in
-                guard let detail = secondary.detail,
-                      let windowLimit = detail.limit?.value,
-                      windowLimit > 0,
-                      let windowRemaining = detail.remaining?.value else {
-                    return nil
-                }
-                let name = Self.isFiveHour(secondary.window)
-                    ? "5 小时窗口"
-                    : "额度窗口 \(index + 1)"
-                return QuotaWindow(
-                    name: name,
-                    limit: windowLimit,
-                    remaining: windowRemaining,
-                    resetAt: detail.resetTime?.value
-                )
-            }
-
+            let quota = try decoded.resolvedQuota()
             return QuotaSnapshot(
                 accountID: accountID,
-                limit: limit,
-                remaining: remaining,
-                resetAt: primary.resetTime?.value,
+                limit: quota.limit,
+                remaining: quota.remaining,
+                resetAt: quota.resetAt,
                 fetchedAt: now(),
-                windows: windows.isEmpty ? nil : windows
+                windows: quota.windows.isEmpty ? nil : quota.windows
             )
         } catch let error as BalanceProviderError {
             throw error
@@ -113,7 +83,7 @@ struct KimiCodeAdapter: AccountProvider, CredentialAccountAdapter {
         }
     }
 
-    private static func isFiveHour(_ window: WindowEntry?) -> Bool {
+    fileprivate static func isFiveHour(_ window: WindowEntry?) -> Bool {
         guard let duration = window?.duration?.value else {
             return false
         }
@@ -130,10 +100,11 @@ struct KimiCodeAdapter: AccountProvider, CredentialAccountAdapter {
     private static func decodeUsage(from body: Data) throws -> UsageResponse {
         let decoder = JSONDecoder()
         if let envelope = try? decoder.decode(UsageEnvelope.self, from: body),
-           envelope.data.normalized != nil {
+           envelope.data.hasQuotaData {
             return envelope.data
         }
-        if let root = try? decoder.decode(UsageResponse.self, from: body) {
+        if let root = try? decoder.decode(UsageResponse.self, from: body),
+           root.hasQuotaData {
             return root
         }
         throw BalanceProviderError.malformedResponse
@@ -144,14 +115,117 @@ private struct UsageEnvelope: Decodable {
     let data: UsageResponse
 }
 
+private struct ResolvedQuota {
+    let limit: Decimal
+    let remaining: Decimal
+    let resetAt: Date?
+    let windows: [QuotaWindow]
+}
+
+/// The name-keyed ratio pools introduced with the newer Kimi Code quota model.
+private enum RatioKey: String, CaseIterable {
+    case fiveHour = "limit_5h"
+    case week = "limit_7d"
+    case monthTotal = "limit_month_total"
+    case monthCode = "limit_month_code"
+
+    var title: String {
+        switch self {
+        case .fiveHour: "5 小时窗口"
+        case .week: "本周用量"
+        case .monthTotal: "本月用量"
+        case .monthCode: "本月 Code 用量"
+        }
+    }
+}
+
+private struct RatioPool: Decodable, Equatable {
+    let usedRatio: FlexibleDecimal?
+    let resetTime: FlexibleDate?
+
+    private enum CodingKeys: String, CodingKey {
+        case usedRatio = "used_ratio"
+        case resetTime = "reset_time"
+    }
+
+    /// `used_ratio` is normally 0...1. Some clients have observed values
+    /// already expressed as percentages, so values above 1 are treated as a
+    /// percentage rather than doubled.
+    var remainingPercent: Decimal? {
+        guard let raw = usedRatio?.value, raw >= 0 else {
+            return nil
+        }
+        let usedPercent = raw > 1 ? raw : raw * 100
+        return max(0, min(100, 100 - usedPercent))
+    }
+}
+
+private struct UsagePools: Decodable, Equatable {
+    let fiveHour: RatioPool?
+    let week: RatioPool?
+    let monthTotal: RatioPool?
+    let monthCode: RatioPool?
+
+    private enum CodingKeys: String, CodingKey {
+        case fiveHour = "limit_5h"
+        case week = "limit_7d"
+        case monthTotal = "limit_month_total"
+        case monthCode = "limit_month_code"
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        fiveHour = try? container.decodeIfPresent(RatioPool.self, forKey: .fiveHour)
+        week = try? container.decodeIfPresent(RatioPool.self, forKey: .week)
+        monthTotal = try? container.decodeIfPresent(RatioPool.self, forKey: .monthTotal)
+        monthCode = try? container.decodeIfPresent(RatioPool.self, forKey: .monthCode)
+    }
+
+    var hasAny: Bool {
+        fiveHour != nil || week != nil || monthTotal != nil || monthCode != nil
+    }
+
+    func pool(for key: RatioKey) -> RatioPool? {
+        switch key {
+        case .fiveHour: fiveHour
+        case .week: week
+        case .monthTotal: monthTotal
+        case .monthCode: monthCode
+        }
+    }
+
+    var ordered: [(key: RatioKey, pool: RatioPool)] {
+        RatioKey.allCases.compactMap { key in
+            guard let pool = pool(for: key) else {
+                return nil
+            }
+            return (key, pool)
+        }
+    }
+
+    /// Weekly first, then the monthly aggregate pools. The 5-hour burst
+    /// window is a secondary detail and only becomes primary when no
+    /// weekly/monthly pool is usable.
+    var primary: (key: RatioKey, pool: RatioPool)? {
+        for key in [RatioKey.week, .monthTotal, .monthCode] {
+            if let pool = pool(for: key), pool.remainingPercent != nil {
+                return (key, pool)
+            }
+        }
+        return nil
+    }
+}
+
 private struct UsageResponse: Decodable {
     let usage: UsageEntry?
     let limits: [LimitEntry]
+    let usages: UsagePools?
     let hasUsageKey: Bool
 
     private enum CodingKeys: String, CodingKey {
         case usage
         case limits
+        case usages
     }
 
     init(from decoder: any Decoder) throws {
@@ -166,31 +240,114 @@ private struct UsageResponse: Decodable {
         } else {
             limits = []
         }
+        usages = (try? container.decodeIfPresent(
+            UsagePools.self,
+            forKey: .usages
+        )) ?? nil
     }
 
-    /// A present weekly usage is authoritative: if it is invalid, the whole
-    /// response is malformed rather than promoting a 5-hour window to primary.
-    /// Limits are secondary windows and are decoded individually, so one bad
-    /// entry cannot discard a valid weekly quota.
-    var normalized: (primary: UsageEntry, secondaries: [LimitEntry])? {
+    var hasQuotaData: Bool {
+        hasUsageKey || !limits.isEmpty || (usages?.hasAny ?? false)
+    }
+
+    /// The new `usages` ratio model and the legacy `usage` + `limits` model
+    /// coexist in real responses. Prefer a present legacy weekly usage, then
+    /// weekly/monthly ratio pools, then the 5-hour window as a last resort.
+    func resolvedQuota() throws -> ResolvedQuota {
         if hasUsageKey {
-            guard let usage, usage.isValid else {
-                return nil
+            guard let usage,
+                  usage.isValid,
+                  let limit = usage.limit?.value,
+                  limit > 0,
+                  let remaining = usage.remaining?.value else {
+                throw BalanceProviderError.malformedResponse
             }
-            return (usage, limits.filter { $0.detail?.isValid == true })
+            var windows = legacyWindows()
+            // `usage` is the weekly metric, so the ratio week would duplicate it.
+            windows += ratioWindows(excluding: .week)
+            return ResolvedQuota(
+                limit: limit,
+                remaining: remaining,
+                resetAt: usage.resetTime?.value,
+                windows: deduped(windows)
+            )
         }
 
-        guard let firstIndex = limits.firstIndex(where: {
-            $0.detail?.isValid == true
-        }), let primary = limits[firstIndex].detail else {
-            return nil
-        }
-        let secondaries = limits.enumerated()
-            .filter {
-                $0.offset != firstIndex && $0.element.detail?.isValid == true
+        if let primary = usages?.primary,
+           let remaining = primary.pool.remainingPercent {
+            var windows = ratioWindows(excluding: primary.key)
+            if !windows.contains(where: { $0.name == "5 小时窗口" }) {
+                windows += legacyWindows()
             }
-            .map(\.element)
-        return (primary, secondaries)
+            return ResolvedQuota(
+                limit: 100,
+                remaining: remaining,
+                resetAt: primary.pool.resetTime?.value,
+                windows: deduped(windows)
+            )
+        }
+
+        if let firstIndex = limits.firstIndex(where: {
+            $0.detail?.isValid == true
+        }),
+            let primary = limits[firstIndex].detail,
+            let limit = primary.limit?.value,
+            limit > 0,
+            let remaining = primary.remaining?.value {
+            var windows = legacyWindows(excluding: firstIndex)
+            windows += ratioWindows()
+            return ResolvedQuota(
+                limit: limit,
+                remaining: remaining,
+                resetAt: primary.resetTime?.value,
+                windows: deduped(windows)
+            )
+        }
+
+        throw BalanceProviderError.malformedResponse
+    }
+
+    private func legacyWindows(
+        excluding excludedIndex: Int? = nil
+    ) -> [QuotaWindow] {
+        limits.enumerated().compactMap { index, limit in
+            guard index != excludedIndex,
+                  let detail = limit.detail,
+                  let windowLimit = detail.limit?.value,
+                  windowLimit > 0,
+                  let windowRemaining = detail.remaining?.value else {
+                return nil
+            }
+            let name = KimiCodeAdapter.isFiveHour(limit.window)
+                ? "5 小时窗口"
+                : "额度窗口 \(index + 1)"
+            return QuotaWindow(
+                name: name,
+                limit: windowLimit,
+                remaining: windowRemaining,
+                resetAt: detail.resetTime?.value
+            )
+        }
+    }
+
+    private func ratioWindows(excluding excluded: RatioKey? = nil) -> [QuotaWindow] {
+        usages?.ordered.compactMap { key, pool in
+            guard key != excluded,
+                  let remaining = pool.remainingPercent else {
+                return nil
+            }
+            return QuotaWindow(
+                name: key.title,
+                limit: 100,
+                remaining: remaining,
+                resetAt: pool.resetTime?.value
+            )
+        } ?? []
+    }
+
+    private func deduped(_ windows: [QuotaWindow]) -> [QuotaWindow] {
+        var seen: Set<String> = []
+        return windows.filter { seen.insert($0.name).inserted }
     }
 }
 

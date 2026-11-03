@@ -187,17 +187,17 @@ struct PersistenceLaunchTests {
     }
 
     @Test
-    func mockModeDoesNotReadOrWritePersistedAccounts() async {
-        let realAccount = Account(id: UUID(), provider: .deepSeek, label: "真实账户")
+    func mockModeUsesTheInjectedAccountsWithoutWritingSnapshots() async {
+        let account = Account(id: UUID(), provider: .deepSeek, label: "真实账户")
         let persisted = BalanceSnapshot(
-            accountID: realAccount.id,
+            accountID: account.id,
             balance: Balance(amount: Decimal(string: "3.00")!, currency: .cny),
             fetchedAt: now.addingTimeInterval(-60),
             isAvailable: true
         )
         let store = InMemorySnapshotStore(
-            accounts: [realAccount],
-            snapshots: [realAccount.id: persisted]
+            accounts: [account],
+            snapshots: [account.id: persisted]
         )
 
         let mockSource = BalanceDataSource.make(mode: .mock, now: now, store: store)
@@ -207,11 +207,11 @@ struct PersistenceLaunchTests {
             pollingInterval: 300,
             now: { now }
         )
-        await monitor.switchDataSource(.mock(now: now), store: nil)
 
-        #expect(mockSource.accounts.count == 19)
-        #expect(!mockSource.accounts.contains { $0.id == realAccount.id })
-        #expect(store.loadBalanceSnapshots() == [realAccount.id: persisted])
+        // Settings and the panel read the same injected Account list, but mock
+        // mode never persists a fetched Snapshot to the real store.
+        #expect(mockSource.accounts == [account])
+        #expect(store.loadBalanceSnapshots() == [account.id: persisted])
     }
 
     @Test

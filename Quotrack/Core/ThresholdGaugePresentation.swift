@@ -1,7 +1,7 @@
 import Foundation
 
-struct ThresholdGaugeSegment: Equatable, Sendable {
-    enum Role: Equatable, Sendable {
+struct ThresholdGaugeSegment: Equatable, Identifiable, Sendable {
+    enum Role: Hashable, Sendable {
         case critical
         case warning
         case normal
@@ -9,6 +9,8 @@ struct ThresholdGaugeSegment: Equatable, Sendable {
 
     let role: Role
     let isActive: Bool
+
+    var id: Role { role }
 }
 
 /// The zones a Balance threshold gauge shows. The gauge is a status strip, not

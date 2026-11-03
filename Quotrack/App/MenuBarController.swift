@@ -17,12 +17,18 @@ final class MenuBarController: NSObject, NSMenuDelegate {
     init(
         monitor: any BalanceMonitor,
         settings: SettingsModel,
-        onAddAccount: @escaping () -> Void = {}
+        onAddAccount: @escaping (Provider?) -> Void = { _ in },
+        onOpenSettings: @escaping () -> Void = {},
+        onPanelDocked: @escaping () -> Void = {},
+        onPanelShown: @escaping () -> Void = {}
     ) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let panelController = FloatingPanelController(
             monitor: monitor,
-            onAddAccount: onAddAccount
+            onAddAccount: onAddAccount,
+            onOpenSettings: onOpenSettings,
+            onDock: onPanelDocked,
+            onUndock: onPanelShown
         )
         let menu = NSMenu()
         let menuPresenter = StatusMenuPresenter(menu: menu)
@@ -40,6 +46,7 @@ final class MenuBarController: NSObject, NSMenuDelegate {
         self.settings = settings
         self.launchAtLoginItem = launchAtLoginItem
         self.interaction = MenuBarInteractionHandler(panel: panelController, menu: menuPresenter)
+        self.onOpenSettings = onOpenSettings
 
         super.init()
 

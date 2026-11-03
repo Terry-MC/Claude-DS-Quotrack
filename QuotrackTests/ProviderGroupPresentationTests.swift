@@ -78,7 +78,13 @@ struct ProviderGroupPresentationTests {
         )
 
         #expect(moonshot.sections.map(\.kind) == [.balance, .subscription])
-        #expect(moonshot.sections.map(\.title) == ["余额", "额度"])
+        #expect(
+            moonshot.sections.map(\.title)
+                == [
+                    UIStrings.providerBalanceSectionTitle,
+                    UIStrings.providerQuotaSectionTitle,
+                ]
+        )
         #expect(moonshot.sections[0].accountCount == 2)
         #expect(moonshot.sections[1].accountCount == 1)
         #expect(moonshot.sections[0].rows.map(\.account.label) == ["充值一", "充值二"])

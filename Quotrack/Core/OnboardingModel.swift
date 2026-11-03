@@ -40,10 +40,22 @@ final class OnboardingModel {
 
     init(
         accountManager: AccountManager,
-        connectionTester: any ConnectionTesting
+        connectionTester: any ConnectionTesting,
+        initialProvider: Provider? = nil
     ) {
         self.accountManager = accountManager
         self.connectionTester = connectionTester
+        guard let initialProvider, initialProvider.isSupported else {
+            return
+        }
+        selectedProvider = initialProvider
+        selectedKind = initialProvider.supportedKinds.first ?? .balance
+        let defaults = AccountThresholds.defaults(for: selectedKind)
+        warningThresholdText = defaults.warning?.description ?? ""
+        criticalThresholdText = defaults.critical?.description ?? ""
+        // A Provider-card plus button means "add for this Provider"; skip the
+        // picker but keep it reachable through Back.
+        step = initialProvider.supportsRegion ? .region : .details
     }
 
     /// Moves forward from Provider selection or Region selection. Details are
@@ -115,7 +127,11 @@ final class OnboardingModel {
             completedAccount = account
             step = .completed
         } catch {
-            errorMessage = ConnectionErrorMessage.text(for: error, provider: provider)
+            errorMessage = ConnectionErrorMessage.text(
+                for: error,
+                provider: provider,
+                kind: kind
+            )
             step = .details
         }
     }

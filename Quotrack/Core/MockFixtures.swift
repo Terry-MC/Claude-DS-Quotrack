@@ -24,6 +24,13 @@ struct MockQuotaFixture: Equatable, Sendable {
 /// under Moonshot, all typed error categories, a Stale Snapshot, and a legacy
 /// SiliconFlow Account that must render as unsupported.
 enum MockFixtures {
+    /// Every Account the mock sandbox starts with. Settings and the panel read
+    /// the same list from the ephemeral store.
+    static func accounts(now: Date) -> [Account] {
+        standard(now: now).map(\.account)
+            + quotaFixtures(now: now).map(\.account)
+    }
+
     static func standard(now: Date) -> [MockFixture] {
         [
             fixture(
@@ -181,7 +188,7 @@ enum MockFixtures {
         now: Date
     ) -> MockQuotaFixture {
         let account = Account(
-            id: UUID(),
+            id: fixtureID(label),
             provider: .moonshot,
             kind: .subscription,
             label: label,
@@ -215,7 +222,11 @@ enum MockFixtures {
         error: BalanceProviderError
     ) -> MockFixture {
         MockFixture(
-            account: Account(id: UUID(), provider: provider, label: label),
+            account: Account(
+                id: fixtureID(label),
+                provider: provider,
+                label: label
+            ),
             outcome: .failure(error)
         )
     }
@@ -232,7 +243,7 @@ enum MockFixtures {
         criticalThreshold: Decimal? = nil
     ) -> MockFixture {
         let account = Account(
-            id: UUID(),
+            id: fixtureID(label),
             provider: provider,
             label: label,
             warningThreshold: warningThreshold,
@@ -246,5 +257,25 @@ enum MockFixtures {
                 fetchedAt: now.addingTimeInterval(-age)
             )
         )
+    }
+
+    /// Stable IDs let the ephemeral Account list match the mock provider
+    /// fixtures across launches and after Settings edits.
+    private static func fixtureID(_ label: String) -> UUID {
+        var bytes = [UInt8](repeating: 0, count: 16)
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for (index, byte) in label.utf8.enumerated() {
+            hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01B3
+            bytes[index % 16] ^= UInt8(truncatingIfNeeded: hash >> 7)
+        }
+        bytes[6] = (bytes[6] & 0x0F) | 0x40
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        let hex = bytes.map { String(format: "%02X", $0) }.joined()
+        let a = hex.prefix(8)
+        let b = hex.dropFirst(8).prefix(4)
+        let c = hex.dropFirst(12).prefix(4)
+        let d = hex.dropFirst(16).prefix(4)
+        let e = hex.dropFirst(20)
+        return UUID(uuidString: "\(a)-\(b)-\(c)-\(d)-\(e)")!
     }
 }

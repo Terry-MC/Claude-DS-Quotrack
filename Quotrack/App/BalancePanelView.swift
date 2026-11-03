@@ -11,86 +11,87 @@ struct BalancePanelView: View {
     /// Requests carry a sequence so repeated focus on one Account still
     /// scrolls the panel back to it.
     var focus: PanelFocusModel = PanelFocusModel()
-    var onAddAccount: () -> Void = {}
+    var onAddAccount: (Provider?) -> Void = { _ in }
+    var onOpenSettings: () -> Void = {}
+    var onClose: () -> Void = {}
     @State private var expansion = BalanceRowExpansion()
     @State private var providerCollapse = ProviderCollapseState()
 
     var body: some View {
-        let rows = monitor.rows
-        if rows.isEmpty {
-            emptyState
-        } else {
-            panel(rows: rows)
+        ZStack {
+            GlassPanelBackground()
+            if monitor.rows.isEmpty {
+                emptyState
+            } else {
+                panel(rows: monitor.rows)
+            }
         }
+        .frame(minWidth: 400, maxWidth: .infinity, minHeight: 480, maxHeight: .infinity)
+        .clipShape(
+            RoundedRectangle(cornerRadius: UITheme.Radius.panel, style: .continuous)
+        )
+        .preferredColorScheme(.dark)
     }
 
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(UIStrings.emptyAccountsTitle, systemImage: "person.crop.circle.badge.plus")
-        } description: {
-            Text(UIStrings.emptyAccountsDescription)
-        } actions: {
-            Button(UIStrings.addAccount, action: onAddAccount)
-                .buttonStyle(.borderedProminent)
+        VStack(spacing: 14) {
+            Spacer()
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 54, height: 54)
+                .background(
+                    UITheme.accentGradient,
+                    in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                )
+                .shadow(color: UITheme.accentEnd.opacity(0.35), radius: 16, y: 8)
+            VStack(spacing: 4) {
+                Text(UIStrings.emptyAccountsTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(UITheme.textPrimary)
+                Text(UIStrings.emptyAccountsDescription)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(UITheme.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button(UIStrings.addAccount) {
+                onAddAccount(nil)
+            }
+                .buttonStyle(AccentButtonStyle())
+                .padding(.top, 4)
+            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
     }
 
     private func panel(rows: [BalanceRow]) -> some View {
         let header = PanelHeaderPresentation.viewState(for: rows)
+        let groups = ProviderGroupPresentation.groups(
+            from: rows,
+            collapseState: providerCollapse
+        )
         return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(header.title)
-                        .font(.headline)
-                    Text(header.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Text(header.healthyText)
-                    .foregroundStyle(.green)
-                if header.warningCount > 0 {
-                    Text(header.warningText)
-                        .foregroundStyle(.orange)
-                }
-                if header.criticalCount > 0 {
-                    Text(header.criticalText)
-                        .foregroundStyle(.red)
-                }
-                Text(header.errorText)
-                    .foregroundStyle(.red)
-                Button {
-                    Task { await monitor.refresh() }
-                } label: {
-                    Label(UIStrings.refreshAll, systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.borderless)
-                .help(UIStrings.refreshAll)
-                .accessibilityLabel(UIStrings.refreshAll)
-            }
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-
-            Divider()
+            panelHeader(header)
+            Rectangle()
+                .fill(UITheme.hairline)
+                .frame(height: 1)
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(
-                            ProviderGroupPresentation.groups(
-                                from: rows,
-                                collapseState: providerCollapse
-                            )
-                        ) { group in
+                    LazyVStack(spacing: UITheme.Spacing.card) {
+                        ForEach(groups) { group in
                             ProviderCardView(
                                 group: group,
                                 isRowExpanded: { expansion.isExpanded($0) },
                                 onToggleRow: { expansion.toggle($0) },
                                 onToggleCollapse: {
-                                    providerCollapse.toggle(group.provider)
+                                    withAnimation(.easeInOut(duration: 0.22)) {
+                                        providerCollapse.toggle(group.provider)
+                                    }
+                                },
+                                onAddAccount: { provider in
+                                    onAddAccount(provider)
                                 },
                                 onRefreshProvider: {
                                     await monitor.refresh(provider: group.provider)
@@ -99,20 +100,93 @@ struct BalancePanelView: View {
                                     await monitor.refresh(accountID: $0)
                                 }
                             )
-                            Divider()
+                            .id(group.provider)
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 14)
+                    .padding(.bottom, 18)
                 }
+                .scrollIndicators(.never)
                 .onChange(of: focus.request) { _, request in
                     reveal(request, rows: rows, using: proxy)
                 }
                 .onAppear {
-                    reveal(focus.request, rows: rows, using: proxy)
+                    if focus.request == nil, let first = groups.first {
+                        proxy.scrollTo(first.provider, anchor: .top)
+                    } else {
+                        reveal(focus.request, rows: rows, using: proxy)
+                    }
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func panelHeader(_ header: PanelHeaderViewState) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(header.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .tracking(0.2)
+                    .foregroundStyle(UITheme.textPrimary)
+                Text(header.subtitle)
+                    .font(.system(size: 10.5))
+                    .tracking(0.4)
+                    .foregroundStyle(UITheme.textTertiary)
+
+                HStack(spacing: 10) {
+                    HeaderCount(
+                        text: header.healthyText,
+                        color: UITheme.green,
+                        count: header.healthyCount
+                    )
+                    if header.warningCount > 0 {
+                        HeaderCount(
+                            text: header.warningText,
+                            color: UITheme.yellow,
+                            count: header.warningCount
+                        )
+                    }
+                    if header.criticalCount > 0 {
+                        HeaderCount(
+                            text: header.criticalText,
+                            color: UITheme.red,
+                            count: header.criticalCount
+                        )
+                    }
+                    HeaderCount(
+                        text: header.errorText,
+                        color: UITheme.red.opacity(0.8),
+                        count: header.errorCount
+                    )
+                }
+                .padding(.top, 2)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 2) {
+                GlassIconButton(
+                    systemName: "gearshape",
+                    help: "设置"
+                ) {
+                    onOpenSettings()
+                }
+                GlassIconButton(
+                    systemName: "arrow.clockwise",
+                    help: UIStrings.refreshAll
+                ) {
+                    Task { await monitor.refresh() }
+                }
+                GlassIconButton(systemName: "xmark", help: "收起面板") {
+                    onClose()
+                }
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+        .padding(.bottom, 14)
     }
 
     /// Expands the requested row and scrolls it into view. The request is
@@ -138,6 +212,27 @@ struct BalancePanelView: View {
     }
 }
 
+private struct HeaderCount: View {
+    let text: String
+    let color: Color
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(color)
+                    .frame(width: 4.5, height: 4.5)
+                Text(text)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .tracking(0.3)
+                    .foregroundStyle(color)
+            }
+            .accessibilityElement(children: .combine)
+        }
+    }
+}
+
 /// One Provider card. The header is always visible; collapsing swaps the
 /// Account rows for a per-Kind summary line without changing the underlying
 /// row states.
@@ -147,28 +242,48 @@ private struct ProviderCardView: View {
     let isRowExpanded: (Account.ID) -> Bool
     let onToggleRow: (Account.ID) -> Void
     let onToggleCollapse: () -> Void
+    let onAddAccount: (Provider) -> Void
     let onRefreshProvider: @MainActor () async -> Void
     let onRefreshAccount: @MainActor (Account.ID) async -> Void
 
     @State private var isRefreshing = false
+    @State private var isHovering = false
 
     var body: some View {
+        let shape = RoundedRectangle(
+            cornerRadius: UITheme.Radius.card,
+            style: .continuous
+        )
         VStack(alignment: .leading, spacing: 0) {
             header
             if group.isCollapsed {
-                VStack(alignment: .leading, spacing: 6) {
+                collapsedSummary
+            } else {
+                VStack(spacing: 0) {
                     ForEach(group.sections) { section in
-                        ProviderKindSummaryView(section: section)
+                        if section.id != group.sections.first?.id {
+                            Rectangle()
+                                .fill(UITheme.hairlineSubtle)
+                                .frame(height: 1)
+                                .padding(.horizontal, 14)
+                        }
+                        sectionView(section)
                     }
                 }
-                .padding(.leading, 26)
-                .padding(.trailing, 14)
-                .padding(.bottom, 8)
-            } else {
-                ForEach(group.sections) { section in
-                    sectionView(section)
-                }
                 .padding(.bottom, 4)
+            }
+        }
+        .background(UITheme.card, in: shape)
+        .overlay(
+            shape.strokeBorder(
+                isHovering ? Color.white.opacity(0.16) : UITheme.hairline,
+                lineWidth: 1
+            )
+        )
+        .clipShape(shape)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) {
+                isHovering = hovering
             }
         }
     }
@@ -176,39 +291,18 @@ private struct ProviderCardView: View {
     private var header: some View {
         HStack(spacing: 8) {
             Button(action: onToggleCollapse) {
-                HStack(spacing: 8) {
-                    Image(systemName: "chevron.right")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(group.isCollapsed ? 0 : 90))
-                        .accessibilityHidden(true)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(group.name)
-                                .font(.headline)
-                            ProviderHealthBadge(
-                                health: group.health,
-                                text: group.healthText
-                            )
-                            if group.errorCount > 0 {
-                                ProviderCountBadge(
-                                    text: group.errorText,
-                                    color: .red
-                                )
-                            }
-                            if group.staleCount > 0 {
-                                ProviderCountBadge(
-                                    text: group.staleText,
-                                    color: .secondary
-                                )
-                            }
-                        }
-                        Text(group.kindCountText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
+                HStack(spacing: 9) {
+                    ProviderMark(provider: group.provider, size: 18)
+                    Text(group.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .tracking(0.2)
+                        .foregroundStyle(UITheme.textPrimary)
+                        .lineLimit(1)
+                    TypeTag(
+                        text: group.typeTag.text,
+                        style: group.typeTag.style
+                    )
+                    CountTag(text: UIStrings.providerAccountCount(group.accountCount))
                     Spacer(minLength: 0)
                 }
                 .contentShape(Rectangle())
@@ -221,28 +315,88 @@ private struct ProviderCardView: View {
                     : UIStrings.collapseProviderHint
             )
 
-            Button {
-                isRefreshing = true
-                Task {
-                    await onRefreshProvider()
-                    isRefreshing = false
+            HStack(spacing: 2) {
+                GlassIconButton(
+                    systemName: "plus",
+                    help: UIStrings.addAccount,
+                    size: 22,
+                    action: { onAddAccount(group.provider) }
+                )
+                GlassIconButton(
+                    systemName: "arrow.clockwise",
+                    help: UIStrings.providerRefresh,
+                    size: 22,
+                    isBusy: isRefreshing
+                ) {
+                    isRefreshing = true
+                    Task {
+                        await onRefreshProvider()
+                        isRefreshing = false
+                    }
                 }
-            } label: {
-                Label(UIStrings.providerRefresh, systemImage: "arrow.clockwise")
-                    .labelStyle(.iconOnly)
+                Button(action: onToggleCollapse) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(UITheme.textTertiary)
+                        .rotationEffect(.degrees(group.isCollapsed ? -90 : 0))
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    group.isCollapsed
+                        ? UIStrings.expandProviderHint
+                        : UIStrings.collapseProviderHint
+                )
             }
-            .buttonStyle(.borderless)
-            .disabled(isRefreshing)
-            .help(UIStrings.providerRefresh)
-            .accessibilityLabel(UIStrings.providerRefresh)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 12)
+    }
+
+    private var collapsedSummary: some View {
+        VStack(spacing: 10) {
+            ForEach(group.sections) { section in
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 6) {
+                        KindDot(kind: section.kind)
+                        Text(
+                            "\(section.title)账户 · \(UIStrings.providerAccountCount(section.accountCount))"
+                        )
+                        .font(.system(size: 10.5, weight: .medium))
+                        .tracking(0.3)
+                        .foregroundStyle(UITheme.textTertiary)
+                        Spacer(minLength: 8)
+                        if let summary = summary(for: section) {
+                            Text(summary)
+                                .font(.system(size: 10.5))
+                                .monospacedDigit()
+                                .foregroundStyle(UITheme.textSecondary)
+                        }
+                        HealthPill(
+                            health: section.health,
+                            text: section.healthText
+                        )
+                    }
+                    if section.kind == .subscription,
+                       let ratio = quotaRatio(for: section) {
+                        ThinBar(ratio: ratio, tint: UITheme.color(for: section.health))
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 2)
+        .padding(.bottom, 12)
     }
 
     private func sectionView(_ section: ProviderKindSectionViewState) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ProviderKindSectionHeader(section: section)
+            sectionHeader(section)
+            Rectangle()
+                .fill(UITheme.hairlineSubtle)
+                .frame(height: 1)
+                .padding(.leading, 14)
             ForEach(section.rows) { row in
                 BalanceRowView(
                     account: row.account,
@@ -258,135 +412,132 @@ private struct ProviderCardView: View {
                 )
                 .id(row.id)
                 .padding(.horizontal, 14)
-                Divider()
-                    .padding(.leading, 18)
+                if row.id != section.rows.last?.id {
+                    Rectangle()
+                        .fill(UITheme.hairlineSubtle)
+                        .frame(height: 1)
+                        .padding(.leading, 22)
+                }
             }
+            .padding(.bottom, 4)
         }
     }
-}
 
-/// The expanded section title. Health and the per-Kind totals sit on the
-/// header so a section stays scannable without opening an Account row.
-private struct ProviderKindSectionHeader: View {
-    let section: ProviderKindSectionViewState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+    private func sectionHeader(_ section: ProviderKindSectionViewState) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                Text(section.title)
-                    .font(.subheadline.weight(.semibold))
-                Text(UIStrings.providerAccountCount(section.accountCount))
-                    .foregroundStyle(.secondary)
-                if section.warningCount > 0 {
-                    Text(UIStrings.providerWarningCount(section.warningCount))
-                        .foregroundStyle(.orange)
-                }
-                if section.criticalCount > 0 {
-                    Text(UIStrings.providerCriticalCount(section.criticalCount))
-                        .foregroundStyle(.red)
-                }
-                if section.errorCount > 0 {
-                    Text(UIStrings.providerErrorCount(section.errorCount))
-                        .foregroundStyle(.red)
-                }
-                if section.staleCount > 0 {
-                    Text(UIStrings.providerStaleCount(section.staleCount))
-                        .foregroundStyle(.secondary)
+                KindDot(kind: section.kind)
+                Text(
+                    "\(section.title)账户 · \(UIStrings.providerAccountCount(section.accountCount))"
+                )
+                .font(.system(size: 10.5, weight: .medium))
+                .tracking(0.4)
+                .foregroundStyle(UITheme.textTertiary)
+                Spacer(minLength: 8)
+                HealthPill(health: section.health, text: section.healthText)
+            }
+
+            HStack(spacing: 8) {
+                if let summary = summary(for: section) {
+                    Text(summary)
+                        .font(.system(size: 10.5, weight: .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(UITheme.textSecondary)
                 }
                 Spacer(minLength: 8)
-                ProviderHealthBadge(
-                    health: section.health,
-                    text: section.healthText
-                )
+                issueCounts(for: section)
             }
-            .font(.caption)
 
-            if section.kind == .balance, let total = section.balanceTotalText {
-                Text(total)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            } else if let worst = section.quotaWorstRemainingSummaryText {
-                Text(worst)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            if section.kind == .subscription,
+               let ratio = quotaRatio(for: section) {
+                ThinBar(ratio: ratio, tint: UITheme.color(for: section.health))
             }
         }
-        .padding(.leading, 26)
-        .padding(.trailing, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
-}
 
-/// The per-Kind line shown while a Provider card is collapsed.
-private struct ProviderKindSummaryView: View {
-    let section: ProviderKindSectionViewState
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            HStack(spacing: 6) {
-                Text(section.title)
-                    .font(.caption.weight(.semibold))
-                Text(UIStrings.providerAccountCount(section.accountCount))
-                    .foregroundStyle(.secondary)
-                if section.errorCount > 0 {
-                    Text(UIStrings.providerErrorCount(section.errorCount))
-                        .foregroundStyle(.red)
-                }
-                if section.staleCount > 0 {
-                    Text(UIStrings.providerStaleCount(section.staleCount))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                ProviderHealthBadge(
-                    health: section.health,
-                    text: section.healthText
+    @ViewBuilder
+    private func issueCounts(for section: ProviderKindSectionViewState) -> some View {
+        HStack(spacing: 8) {
+            if section.warningCount > 0 {
+                IssueLabel(
+                    text: UIStrings.providerWarningCount(section.warningCount),
+                    color: UITheme.yellow
                 )
             }
-            .font(.caption)
-
-            if section.kind == .balance, let total = section.balanceTotalText {
-                Text(total)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            } else if let worst = section.quotaWorstRemainingSummaryText {
-                Text(worst)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
+            if section.criticalCount > 0 {
+                IssueLabel(
+                    text: UIStrings.providerCriticalCount(section.criticalCount),
+                    color: UITheme.red
+                )
+            }
+            if section.errorCount > 0 {
+                IssueLabel(
+                    text: UIStrings.providerErrorCount(section.errorCount),
+                    color: UITheme.red
+                )
+            }
+            if section.staleCount > 0 {
+                IssueLabel(
+                    text: UIStrings.providerStaleCount(section.staleCount),
+                    color: UITheme.textTertiary
+                )
             }
         }
     }
+
+    private func summary(for section: ProviderKindSectionViewState) -> String? {
+        if section.kind == .balance {
+            return section.balanceTotalText
+        }
+        return section.quotaWorstRemainingSummaryText
+    }
+
+    private func quotaRatio(for section: ProviderKindSectionViewState) -> Double? {
+        guard let percent = section.quotaWorstRemainingPercent else {
+            return nil
+        }
+        return min(1, max(0, NSDecimalNumber(decimal: percent).doubleValue / 100))
+    }
 }
 
-private struct ProviderHealthBadge: View {
-    let health: AccountHealth
+private struct CountTag: View {
     let text: String
 
     var body: some View {
         Text(text)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(health.color)
-            .padding(.horizontal, 6)
+            .font(.system(size: 9.5))
+            .foregroundStyle(UITheme.textTertiary)
+            .padding(.horizontal, 7)
             .padding(.vertical, 2)
-            .background(health.color.opacity(0.12), in: Capsule())
+            .overlay(
+                Capsule().strokeBorder(UITheme.hairline, lineWidth: 1)
+            )
+            .lineLimit(1)
     }
 }
 
-private struct ProviderCountBadge: View {
+private struct KindDot: View {
+    let kind: AccountKind
+
+    var body: some View {
+        Circle()
+            .fill(kind == .balance ? UITheme.topUp : UITheme.subscription)
+            .frame(width: 5, height: 5)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct IssueLabel: View {
     let text: String
     let color: Color
 
     var body: some View {
         Text(text)
-            .font(.caption2)
+            .font(.system(size: 9.5))
             .foregroundStyle(color)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(color.opacity(0.10), in: Capsule())
     }
 }
 
@@ -402,124 +553,165 @@ private struct BalanceRowView: View {
     let onToggle: () -> Void
     let onRefresh: @MainActor () async -> Void
 
+    @State private var isRefreshing = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button(action: onToggle) {
-                HStack(alignment: .center, spacing: 10) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                        .accessibilityHidden(true)
+            HStack(alignment: .top, spacing: 6) {
+                Button(action: onToggle) {
+                    rowContent
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(
+                    isExpanded ? UIStrings.collapseRowHint : UIStrings.expandRowHint
+                )
 
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            if showsProviderName {
-                                Text(viewState.providerName)
-                                    .font(.headline)
-                            }
-                            if viewState.showsHealth {
-                                Text(viewState.healthText)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(viewState.health.color)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        viewState.health.color.opacity(0.12),
-                                        in: Capsule()
-                                    )
-                            }
-                            if viewState.isExperimental {
-                                Text(UIStrings.experimentalBadge)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .overlay(
-                                        Capsule()
-                                            .strokeBorder(
-                                                .secondary.opacity(0.35)
-                                            )
-                                    )
-                            }
-                        }
-                        Text(viewState.label)
-                            .font(showsProviderName ? .subheadline : .headline)
-                            .foregroundStyle(showsProviderName ? .secondary : .primary)
-                        if !viewState.isQuota {
-                            BalanceThresholdGauge(
-                                account: account,
-                                health: viewState.health
-                            )
-                        }
-                        Text(viewState.thresholdText)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                        if viewState.isQuota,
-                           let ratio = viewState.quotaRemainingRatio {
-                            ProgressView(value: ratio)
-                                .tint(balanceColor)
-                                .controlSize(.small)
-                        }
-                        if let secondary = viewState.quotaSecondaryText {
-                            Text(secondary)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
+                VStack(spacing: 2) {
+                    GlassIconButton(
+                        systemName: "arrow.clockwise",
+                        help: UIStrings.refreshAccount,
+                        size: 20,
+                        isBusy: isRefreshing
+                    ) {
+                        isRefreshing = true
+                        Task {
+                            await onRefresh()
+                            isRefreshing = false
                         }
                     }
-
-                    Spacer(minLength: 12)
-
-                    VStack(alignment: .trailing, spacing: 2) {
-                        if viewState.isQuota {
-                            Text(viewState.quotaRemainingText ?? "—")
-                                .font(.title3)
-                                .monospacedDigit()
-                                .foregroundStyle(balanceColor)
-                            if let used = viewState.quotaUsedText {
-                                Text(used)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if let reset = viewState.quotaResetText {
-                                Text(reset)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        } else {
-                            Text(viewState.balanceText)
-                                .font(.title3)
-                                .monospacedDigit()
-                                .foregroundStyle(balanceColor)
-                        }
-                        HStack(spacing: 4) {
-                            Text(viewState.updatedText)
-                                .foregroundStyle(.secondary)
-                            Text("·")
-                                .foregroundStyle(.secondary)
-                            Text(viewState.statusText)
-                                .foregroundStyle(statusColor)
-                        }
-                        .font(.caption)
-                    }
-
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(UITheme.textTertiary)
+                        .frame(width: 20, height: 16)
                         .accessibilityHidden(true)
                 }
-                .contentShape(Rectangle())
-                .padding(.vertical, 8)
+                .padding(.top, 8)
             }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityHint(isExpanded ? UIStrings.collapseRowHint : UIStrings.expandRowHint)
+            .padding(.vertical, 9)
 
             if isExpanded {
                 BalanceRowDetailView(detail: detail, onRefresh: onRefresh)
-                    .padding(.leading, 18)
+                    .padding(.leading, 22)
                     .padding(.bottom, 10)
             }
         }
+    }
+
+    private var rowContent: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 6, height: 6)
+                    .accessibilityHidden(true)
+                if showsProviderName {
+                    Text(viewState.providerName)
+                        .font(.system(size: 10))
+                        .foregroundStyle(UITheme.textTertiary)
+                }
+                Text(viewState.label)
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .tracking(0.2)
+                    .foregroundStyle(UITheme.textPrimary)
+                    .lineLimit(1)
+                TypeTag(
+                    text: account.kind.typeTagText,
+                    style: account.kind.typeTagStyle
+                )
+                if viewState.isExperimental {
+                    TypeTag(text: UIStrings.experimentalBadge, style: .experimental)
+                }
+                Spacer(minLength: 6)
+                Text(metaText)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(UITheme.textTertiary)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(primaryValueText)
+                    .font(.system(size: 16, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(balanceColor)
+                    .lineLimit(1)
+                if let secondaryValueText {
+                    Text(secondaryValueText)
+                        .font(.system(size: 10))
+                        .foregroundStyle(UITheme.textSecondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 6)
+                valueChips
+            }
+
+            if viewState.isQuota {
+                if let ratio = viewState.quotaRemainingRatio {
+                    ThinBar(ratio: ratio, tint: balanceColor)
+                }
+                if let secondary = viewState.quotaSecondaryText {
+                    Text(secondary)
+                        .font(.system(size: 9))
+                        .foregroundStyle(UITheme.textTertiary)
+                        .lineLimit(1)
+                }
+            } else {
+                BalanceThresholdGauge(
+                    account: account,
+                    health: viewState.health
+                )
+            }
+
+            HStack(spacing: 8) {
+                Text(viewState.thresholdText)
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(UITheme.textTertiary)
+                    .lineLimit(1)
+                Spacer(minLength: 6)
+                if viewState.showsHealth {
+                    HealthPill(
+                        health: viewState.health,
+                        text: viewState.healthText
+                    )
+                } else {
+                    Text(viewState.statusText)
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(statusColor)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var valueChips: some View {
+        if viewState.isQuota {
+            if let reset = viewState.quotaResetText {
+                ValueChip(label: nil, value: reset)
+            }
+        } else {
+            ForEach(Array(detail.breakdown.prefix(2))) { item in
+                ValueChip(label: item.label, value: item.amountText)
+            }
+        }
+    }
+
+    private var metaText: String {
+        "\(viewState.updatedText) · \(viewState.statusText)"
+    }
+
+    private var primaryValueText: String {
+        if viewState.isQuota {
+            return viewState.quotaRemainingText ?? "—"
+        }
+        return viewState.balanceText
+    }
+
+    private var secondaryValueText: String? {
+        guard viewState.isQuota else {
+            return nil
+        }
+        return viewState.quotaUsedText
     }
 
     private var appearance: BalanceRowAppearance {
@@ -535,17 +727,56 @@ private struct BalanceRowView: View {
     }
 }
 
-private extension AccountHealth {
-    var emphasis: BalanceRowAppearance.Emphasis {
-        switch self {
-        case .normal: .positive
-        case .warning: .warning
-        case .critical: .error
-        case .unset: .secondary
-        }
-    }
+private struct ValueChip: View {
+    let label: String?
+    let value: String
 
-    var color: Color { emphasis.color }
+    var body: some View {
+        HStack(spacing: 3) {
+            if let label {
+                Text(label)
+                    .foregroundStyle(UITheme.textTertiary)
+            }
+            Text(value)
+                .fontWeight(.medium)
+                .foregroundStyle(UITheme.textPrimary)
+        }
+        .font(.system(size: 9))
+        .lineLimit(1)
+    }
+}
+
+private struct ThinBar: View {
+    let ratio: Double
+    let tint: Color
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule().fill(UITheme.track)
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [tint.opacity(0.65), tint],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(
+                        width: geometry.size.width
+                            * min(1, max(0, ratio))
+                    )
+            }
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
+    }
+}
+
+private extension AccountHealth {
+    var color: Color {
+        UITheme.color(for: self)
+    }
 }
 
 private extension ThresholdGaugeSegment.Role {
@@ -554,6 +785,20 @@ private extension ThresholdGaugeSegment.Role {
         case .critical: .error
         case .warning: .warning
         case .normal: .positive
+        }
+    }
+}
+
+private extension BalanceRowAppearance.Emphasis {
+    var color: Color {
+        switch self {
+        case .primary: UITheme.textPrimary
+        case .positive: UITheme.green
+        case .warning: UITheme.yellow
+        case .muted: UITheme.textTertiary
+        case .secondary: UITheme.textSecondary
+        case .error: UITheme.red
+        case .pending: UITheme.textTertiary
         }
     }
 }
@@ -569,11 +814,20 @@ private struct BalanceThresholdGauge: View {
         )
         if !segments.isEmpty {
             HStack(spacing: 2) {
-                ForEach(Array(segments.enumerated()), id: \.offset) { _, segment in
+                ForEach(segments, id: \.role) { segment in
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
-                            segment.role.emphasis.color.opacity(
-                                segment.isActive ? 1 : 0.22
+                            LinearGradient(
+                                colors: [
+                                    segment.role.emphasis.color.opacity(
+                                        segment.isActive ? 0.65 : 0.16
+                                    ),
+                                    segment.role.emphasis.color.opacity(
+                                        segment.isActive ? 1 : 0.22
+                                    ),
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
                             )
                         )
                         .frame(maxWidth: .infinity)
@@ -588,20 +842,6 @@ private struct BalanceThresholdGauge: View {
     }
 }
 
-private extension BalanceRowAppearance.Emphasis {
-    var color: Color {
-        switch self {
-        case .primary: .primary
-        case .positive: .green
-        case .warning: .orange
-        case .muted: .gray
-        case .secondary: .secondary
-        case .error: .red
-        case .pending: .secondary
-        }
-    }
-}
-
 @MainActor
 private struct BalanceRowDetailView: View {
     let detail: BalanceRowDetailViewState
@@ -609,6 +849,7 @@ private struct BalanceRowDetailView: View {
     @State private var isRefreshing = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
         VStack(alignment: .leading, spacing: 6) {
             if let balanceText = detail.balanceText {
                 labelledValue(UIStrings.preciseBalanceLabel, balanceText)
@@ -620,41 +861,47 @@ private struct BalanceRowDetailView: View {
             labelledValue(UIStrings.thresholdLabel, detail.thresholdText)
             if !detail.quotaLines.isEmpty {
                 Text(UIStrings.quotaDetailTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(UITheme.textTertiary)
                 ForEach(detail.quotaLines, id: \.self) { line in
                     Text(line)
-                        .font(.caption)
+                        .font(.system(size: 10))
                         .monospacedDigit()
+                        .foregroundStyle(UITheme.textSecondary)
                 }
             }
             if let currencyWarningText = detail.currencyWarningText {
                 Text(currencyWarningText)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.yellow)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !detail.breakdown.isEmpty {
                 Text(UIStrings.breakdownTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(UITheme.textTertiary)
                 ForEach(detail.breakdown) { item in
                     HStack(spacing: 8) {
                         Text(item.label)
+                            .foregroundStyle(UITheme.textSecondary)
                         Spacer(minLength: 8)
                         Text(item.amountText)
                             .monospacedDigit()
+                            .foregroundStyle(UITheme.textPrimary)
                     }
-                    .font(.caption)
+                    .font(.system(size: 10))
                 }
             }
             if let errorText = detail.errorText {
                 Text(UIStrings.errorTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.red)
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .tracking(0.4)
+                    .foregroundStyle(UITheme.red)
                 Text(errorText)
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                    .font(.system(size: 10))
+                    .foregroundStyle(UITheme.red)
             }
 
             Button {
@@ -668,37 +915,40 @@ private struct BalanceRowDetailView: View {
                     isRefreshing ? UIStrings.refreshing : UIStrings.refreshAccount,
                     systemImage: "arrow.clockwise"
                 )
-                .font(.caption)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(SecondaryButtonStyle())
             .disabled(isRefreshing)
-            .padding(.top, 4)
+            .padding(.top, 2)
         }
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.black.opacity(0.18), in: shape)
+        .overlay(shape.strokeBorder(UITheme.hairlineSubtle, lineWidth: 1))
     }
 
     private func labelledValue(_ label: String, _ value: String) -> some View {
         HStack(spacing: 8) {
             Text(label)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(UITheme.textTertiary)
             Spacer(minLength: 8)
             Text(value)
                 .monospacedDigit()
+                .foregroundStyle(UITheme.textSecondary)
         }
-        .font(.caption)
+        .font(.system(size: 10))
     }
 }
 
 #Preview("模拟数据面板") {
     let monitor = LiveBalanceMonitor(dataSource: .mock(now: Date()))
     BalancePanelView(monitor: monitor)
-        .frame(width: 360, height: 420)
+        .frame(width: 460, height: 420)
         .task { await monitor.refresh() }
 }
 
 #Preview("空状态") {
     BalancePanelView(monitor: PreviewBalanceMonitor())
-        .frame(width: 360, height: 420)
+        .frame(width: 460, height: 420)
 }
 
 #Preview("新鲜、过期与错误") {
@@ -739,7 +989,7 @@ private struct BalanceRowDetailView: View {
         ),
     ]
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
-        .frame(width: 360, height: 420)
+        .frame(width: 460, height: 420)
 }
 
 #Preview("健康状态") {
@@ -825,12 +1075,12 @@ private struct BalanceRowDetailView: View {
         ),
     ]
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
-        .frame(width: 360, height: 520)
+        .frame(width: 460, height: 520)
 }
 
 #Preview("Kimi Code 订阅") {
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: makeKimiQuotaRows(now: Date())))
-        .frame(width: 360, height: 520)
+        .frame(width: 460, height: 520)
 }
 
 private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
@@ -902,7 +1152,7 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
         onRefresh: {}
     )
     .padding()
-    .frame(width: 360)
+    .frame(width: 460)
 }
 
 #Preview("错误详情") {
@@ -917,7 +1167,7 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
         onRefresh: {}
     )
     .padding()
-    .frame(width: 360)
+    .frame(width: 460)
 }
 
 #Preview("单账户厂商") {
@@ -931,7 +1181,7 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
         now: now
     )
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: [row]))
-        .frame(width: 360, height: 280)
+        .frame(width: 460, height: 280)
 }
 
 #Preview("多账户厂商") {
@@ -955,14 +1205,14 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
         ),
     ]
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
-        .frame(width: 360, height: 520)
+        .frame(width: 460, height: 520)
 }
 
 #Preview("混合账户类型（Moonshot）") {
     let now = Date()
     let rows = makeMixedKindPreviewRows(now: now)
     BalancePanelView(monitor: PreviewBalanceMonitor(rows: rows))
-        .frame(width: 360, height: 640)
+        .frame(width: 460, height: 640)
 }
 
 #Preview("折叠的厂商摘要") {
@@ -981,12 +1231,13 @@ private func makeKimiQuotaRows(now: Date) -> [BalanceRow] {
         isRowExpanded: { _ in false },
         onToggleRow: { _ in },
         onToggleCollapse: {},
+        onAddAccount: { _ in },
         onRefreshProvider: {},
         onRefreshAccount: { _ in }
     )
     .padding(.vertical, 8)
-    .frame(width: 360)
-    .background(Color(nsColor: .windowBackgroundColor))
+    .frame(width: 460)
+    .background(UITheme.windowBackdrop)
 }
 
 private func makeMixedKindPreviewRows(now: Date) -> [BalanceRow] {
