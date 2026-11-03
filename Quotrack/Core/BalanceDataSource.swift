@@ -37,6 +37,7 @@ extension BalanceDataSource {
     /// SiliconFlow fixtures stay in the list to exercise the unsupported state.
     static func mock(now: Date) -> BalanceDataSource {
         let fixtures = MockFixtures.standard(now: now)
+        let quotaFixtures = MockFixtures.quotaFixtures(now: now)
         let mockProvider = BalanceProviderAdapter(
             provider: MockBalanceProvider(fixtures: fixtures)
         )
@@ -45,9 +46,9 @@ extension BalanceDataSource {
             adapters[ProviderAdapterKey(provider: provider, kind: .balance)] = mockProvider
         }
         adapters[ProviderAdapterKey(provider: .moonshot, kind: .subscription)] =
-            MockQuotaProvider(now: now)
+            MockQuotaProvider(fixtures: quotaFixtures)
         return BalanceDataSource(
-            accounts: fixtures.map(\.account) + [MockFixtures.subscriptionAccount()],
+            accounts: fixtures.map(\.account) + quotaFixtures.map(\.account),
             provider: ProviderRegistry(adapters: adapters)
         )
     }

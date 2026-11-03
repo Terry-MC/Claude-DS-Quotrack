@@ -94,12 +94,13 @@ struct MockModeTests {
         await monitor.refresh()
 
         let header = PanelHeaderPresentation.viewState(for: monitor.rows)
-        #expect(header.healthyCount == 1)
-        #expect(header.warningCount == 2)
-        #expect(header.criticalCount == 0)
+        #expect(header.healthyCount == 2)
+        #expect(header.warningCount == 3)
+        #expect(header.criticalCount == 4)
         #expect(header.errorCount == 7)
-        #expect(header.healthyText == "正常 1")
-        #expect(header.warningText == "预警 2")
+        #expect(header.healthyText == "正常 2")
+        #expect(header.warningText == "预警 3")
+        #expect(header.criticalText == "紧急 4")
         #expect(header.errorText == "错误 7")
     }
 
@@ -152,6 +153,111 @@ struct MockModeTests {
     }
 
     @Test
+    func mockDataSourceCoversEveryBalanceThresholdConfiguration() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        func health(_ label: String) throws -> AccountHealth {
+            let row = try #require(monitor.rows.first { $0.account.label == label })
+            return AccountHealthEvaluator.health(for: row.account, snapshot: row.snapshot)
+        }
+
+        // Both thresholds set, Balance above warning.
+        #expect(try health("个人账户") == .normal)
+        // Warning threshold only.
+        #expect(try health("工作账户") == .warning)
+        // Critical threshold only.
+        #expect(try health("DeepSeek 紧急") == .critical)
+        // No thresholds.
+        #expect(try health("OpenRouter 管理") == .unset)
+        // Zero and negative Balances reach critical without special casing.
+        #expect(try health("DeepSeek 零余额") == .critical)
+        #expect(try health("DeepSeek 负余额") == .critical)
+    }
+
+    @Test
+    func mockDataSourceCoversEveryQuotaStateAndTheMissingWindowCase() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let quotaRows = monitor.rows.filter { $0.account.kind == .subscription }
+        #expect(quotaRows.count == 4)
+
+        func quotaRow(_ label: String) throws -> BalanceRow {
+            try #require(quotaRows.first { $0.account.label == label })
+        }
+
+        #expect(
+            AccountHealthEvaluator.health(
+                for: try quotaRow("Kimi Code 正常").account,
+                snapshot: try quotaRow("Kimi Code 正常").snapshot
+            ) == .normal
+        )
+        #expect(
+            AccountHealthEvaluator.health(
+                for: try quotaRow("Kimi Code 预警").account,
+                snapshot: try quotaRow("Kimi Code 预警").snapshot
+            ) == .warning
+        )
+        #expect(
+            AccountHealthEvaluator.health(
+                for: try quotaRow("Kimi Code 紧急").account,
+                snapshot: try quotaRow("Kimi Code 紧急").snapshot
+            ) == .critical
+        )
+        #expect(
+            AccountHealthEvaluator.health(
+                for: try quotaRow("Kimi Code 未设置").account,
+                snapshot: try quotaRow("Kimi Code 未设置").snapshot
+            ) == .unset
+        )
+
+        let normal = try #require(try quotaRow("Kimi Code 正常").quotaSnapshot)
+        #expect(normal.windows == [])
+        #expect(normal.resetAt == now.addingTimeInterval(86_400))
+        let warning = try #require(try quotaRow("Kimi Code 预警").quotaSnapshot)
+        #expect(warning.windows?.first?.name == "5 小时窗口")
+    }
+
+    @Test
+    func mockDataSourceShowsMixedKindsUnderOneProviderAndDrivesTheDock() async throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let monitor = LiveBalanceMonitor(
+            dataSource: .mock(now: now),
+            pollingInterval: 300,
+            now: { now }
+        )
+
+        await monitor.refresh()
+
+        let groups = ProviderGroupPresentation.groups(from: monitor.rows)
+        let moonshot = try #require(groups.first { $0.provider == .moonshot })
+        #expect(moonshot.sections.map(\.kind) == [.balance, .subscription])
+        #expect(moonshot.health == .critical)
+        // The two Moonshot error Accounts are Balance-kind fixtures, so the
+        // Balance section has the healthy Kimi Account plus both failures.
+        #expect(moonshot.sections[0].rows.count == 3)
+        #expect(moonshot.sections[1].rows.count == 4)
+
+        let dock = DockPresentation.make(rows: monitor.rows, reduceMotion: false)
+        #expect(dock.status == .critical)
+        #expect(dock.badgeCount == 7)
+        #expect(dock.isPulsing)
+    }
+
+    @Test
     func mockDataSourceProvidesBreakdownsForExpandedRowsWhenAvailable() async throws {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let monitor = LiveBalanceMonitor(
@@ -184,7 +290,7 @@ struct MockModeTests {
         let mockSource = BalanceDataSource.make(mode: .mock, now: now)
         let liveSource = BalanceDataSource.make(mode: .live, now: now)
 
-        #expect(mockSource.accounts.count == 13)
+        #expect(mockSource.accounts.count == 19)
         #expect(Set(mockSource.accounts.map(\.provider)) == Set(Provider.allCases))
         #expect(liveSource.accounts.isEmpty)
     }

@@ -6,26 +6,23 @@ import Foundation
 /// A deterministic Quota source for mock-mode subscription Accounts and
 /// previews. The weekly quota is primary; the 5-hour window is secondary.
 struct MockQuotaProvider: AccountProvider {
-    let now: Date
+    private let snapshots: [Account.ID: QuotaSnapshot]
+
+    init(now: Date) {
+        self.init(fixtures: MockFixtures.quotaFixtures(now: now))
+    }
+
+    init(fixtures: [MockQuotaFixture]) {
+        self.snapshots = Dictionary(
+            uniqueKeysWithValues: fixtures.map { ($0.account.id, $0.snapshot) }
+        )
+    }
 
     func fetchSnapshot(for account: Account) async throws -> AccountSnapshot {
-        .quota(
-            QuotaSnapshot(
-                accountID: account.id,
-                limit: 100,
-                remaining: 60,
-                resetAt: now.addingTimeInterval(86_400),
-                fetchedAt: now,
-                windows: [
-                    QuotaWindow(
-                        name: "5 小时窗口",
-                        limit: 100,
-                        remaining: 85,
-                        resetAt: now.addingTimeInterval(3_600)
-                    ),
-                ]
-            )
-        )
+        guard let snapshot = snapshots[account.id] else {
+            throw BalanceProviderError.unknown
+        }
+        return .quota(snapshot)
     }
 }
 

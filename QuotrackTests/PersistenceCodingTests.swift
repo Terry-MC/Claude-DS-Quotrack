@@ -49,6 +49,53 @@ struct PersistenceCodingTests {
     }
 
     @Test
+    func v1AccountsAndSnapshotsMigrateTogether() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("QuotrackV1Migration-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data(LegacyAccountFixtures.mixedAccountsJSON.utf8).write(
+            to: directory.appendingPathComponent("accounts.json")
+        )
+        try Data(LegacyAccountFixtures.snapshotsJSON.utf8).write(
+            to: directory.appendingPathComponent("snapshots.json")
+        )
+
+        let store = FileSnapshotStore(directoryURL: directory)
+        let accounts = store.loadAccounts()
+
+        #expect(accounts.count == 2)
+        let deepSeek = try #require(accounts.first { $0.provider == .deepSeek })
+        #expect(deepSeek.id == LegacyAccountFixtures.deepSeekAccountID)
+        #expect(deepSeek.kind == .balance)
+        #expect(deepSeek.warningThreshold == Decimal(string: "10.5"))
+        #expect(deepSeek.criticalThreshold == nil)
+
+        let siliconFlow = try #require(accounts.first { $0.provider == .siliconFlow })
+        #expect(siliconFlow.id == LegacyAccountFixtures.siliconFlowAccountID)
+        #expect(siliconFlow.kind == .balance)
+        #expect(siliconFlow.warningThreshold == Decimal(string: "10.5"))
+        #expect(!siliconFlow.provider.isSupported)
+
+        let snapshots = store.loadSnapshots()
+        #expect(snapshots.count == 2)
+        #expect(snapshots.values.allSatisfy { $0.balanceSnapshot != nil })
+        let deepSeekSnapshot = try #require(
+            snapshots[LegacyAccountFixtures.deepSeekAccountID]?.balanceSnapshot
+        )
+        #expect(
+            deepSeekSnapshot.balance
+                == Balance(amount: Decimal(string: "12.25")!, currency: .cny)
+        )
+        #expect(deepSeekSnapshot.fetchedAt == LegacyAccountFixtures.legacySnapshotFetchedAt)
+        #expect(
+            snapshots[LegacyAccountFixtures.siliconFlowAccountID]?
+                .balanceSnapshot?.balance
+                == LegacyAccountFixtures.siliconFlowBalance
+        )
+    }
+
+    @Test
     func accountKindAndThresholdsRoundTripThroughJSON() throws {
         let account = Account(
             id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
