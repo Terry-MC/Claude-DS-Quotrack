@@ -3,6 +3,7 @@ import AppKit
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBarController: MenuBarController?
+    private var dockPanelController: DockPanelController?
     private var monitor: LiveBalanceMonitor?
     private var store: (any SnapshotStore)?
     private var accountManager: AccountManager?
@@ -67,6 +68,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.toggleDataSource()
         }
         self.menuBarController = menuBarController
+
+        // The dock stays visible while the main panel is hidden. Clicking it
+        // reveals the panel without activating the app; quitting removes it in
+        // `applicationWillTerminate`.
+        let dockPanelController = DockPanelController(monitor: monitor) { [weak self] in
+            self?.menuBarController?.showPanel()
+        }
+        self.dockPanelController = dockPanelController
+        dockPanelController.show()
 
         monitor.startPolling()
         Task { await monitor.refresh() }
@@ -176,5 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        dockPanelController?.hide()
     }
 }
