@@ -5,7 +5,7 @@ A macOS menu-bar app with a floating panel that shows the remaining prepaid Bala
 ## Status
 
 - **v1 complete** on `main` (PR #16, merge commit `7dd3b37`).
-- **v2 complete** on `integration/20-24` (implementation tickets #18–#27); merge to `main` pending.
+- **v2 complete** on `main` (PR #28, merge commit `7c72d89`); #27 remains open for a live-credential manual smoke.
 - 419 Swift Testing tests across 58 suites pass.
 - Real-key live verification completed for **DeepSeek** and **Moonshot (Kimi, domestic)** in v1. **Kimi Code Quota**, **OpenRouter**, and **SiliconFlow** remain unverified against real credentials; see `docs/manual/`.
 - The v1 spec (#1) and its implementation tickets (#2–#15) are closed. The v2 spec is [#17](https://github.com/Terry-MC/Claude-DS-Quotrack/issues/17); decisions are in `docs/adr/0002-threshold-based-balance-and-quota.md`.
